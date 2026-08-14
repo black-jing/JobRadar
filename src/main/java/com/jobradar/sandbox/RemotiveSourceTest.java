@@ -17,6 +17,7 @@ public class RemotiveSourceTest {
 
         if (!jobs.isEmpty()) {
             System.out.println("测试类收到第一条：" + jobs.get(0));
+            System.out.println("第一条岗位JD：" + jobs.get(0).getDescription());
         }
     }
 }
