@@ -24,15 +24,28 @@ public class RealJobAnalysisSandbox {
 
         Job job = jobs.get(0);
 
-        System.out.println("准备分析岗位：");
-        System.out.println(job.getTitle());
-        System.out.println(job.getCompany());
+        System.out.println("=== 岗位基本信息 ===");
+        System.out.println("公司：" + job.getCompany());
+        System.out.println("岗位：" + job.getTitle());
+        System.out.println("地点：" + job.getLocation());
+        System.out.println("来源：" + job.getSource());
 
         JobAnalyzer analyzer = new DeepSeekJobAnalyzer();
 
-        JobAnalysis analysis = analyzer.analyze(job);
+        try {
 
-        System.out.println("=== AI分析结果 ===");
-        System.out.println(analysis);
+            JobAnalysis analysis = analyzer.analyze(job);
+
+            System.out.println("=== AI分析结果 ===");
+            System.out.println("direction：" + analysis.getDirection());
+            System.out.println("skills：" + analysis.getSkills());
+            System.out.println("summary：" + analysis.getSummary());
+
+        } catch (Exception e) {
+
+            System.out.println(
+                    "AI岗位分析失败：" + e.getMessage()
+            );
+        }
     }
 }

@@ -126,7 +126,14 @@ public class DeepSeekJobAnalyzer implements JobAnalyzer {
             }
             JsonNode analysisJson =
                     mapper.readTree(content);
+            if (analysisJson.path("direction").asText().isBlank()
+                    || !analysisJson.path("skills").isArray()
+                    || analysisJson.path("summary").asText().isBlank()) {
 
+                throw new RuntimeException(
+                        "模型返回结构不符合预期"
+                );
+            }
             String direction = analysisJson
                     .path("direction")
                     .asText();
