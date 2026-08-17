@@ -8,15 +8,25 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-
+import org.springframework.stereotype.Component;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.ArrayList;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Value;
+@Component
 public class DeepSeekJobAnalyzer implements JobAnalyzer {
+    private final String apiUrl;
+    private final String model;
+    public DeepSeekJobAnalyzer(
+            @Value("${deepseek.api-url}") String apiUrl,
+            @Value("${deepseek.model}") String model) {
 
+        this.apiUrl = apiUrl;
+        this.model = model;
+    }
     @Override
     public JobAnalysis analyze(Job job) throws JsonProcessingException {
         String systemPrompt = """
@@ -64,7 +74,7 @@ public class DeepSeekJobAnalyzer implements JobAnalyzer {
 
             ObjectNode requestJson = mapper.createObjectNode();
 
-            requestJson.put("model", "deepseek-v4-flash");
+            requestJson.put("model", model);
             requestJson.put("stream", false);
             requestJson.put("max_tokens", 500);
             ArrayNode messages = requestJson.putArray("messages");
@@ -85,7 +95,7 @@ public class DeepSeekJobAnalyzer implements JobAnalyzer {
                     mapper.writeValueAsString(requestJson);
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(
-                            "https://api.deepseek.com/chat/completions"
+                            apiUrl
                     ))
                     .header("Content-Type", "application/json")
                     .header(

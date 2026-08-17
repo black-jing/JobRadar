@@ -1,5 +1,7 @@
 package com.jobradar.service;
-
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.jobradar.domain.JobAnalysis;
+import com.jobradar.dto.AnalyzeJobRequest;
 import com.jobradar.domain.Job;
 import java.time.LocalDate;
 import org.springframework.stereotype.Service;
@@ -9,12 +11,33 @@ import com.jobradar.deduplication.JobDeduplicator;
 import com.jobradar.source.JobSource;
 import com.jobradar.source.RemotiveJobSource;
 import org.springframework.web.bind.annotation.RequestParam;
-
+import com.jobradar.analysis.JobAnalyzer;
 import java.util.ArrayList;
 import java.util.List;
 @Service
 public class JobService {
+    public JobAnalysis analyzeJob(AnalyzeJobRequest request) {
 
+        Job job = new Job(
+                request.getCompany(),
+                request.getTitle(),
+                request.getLocation(),
+                request.getDescription(),
+                null,
+                "API Request",
+                null
+        );
+
+        try {
+            return jobAnalyzer.analyze(job);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("岗位分析失败", e);
+        }
+    }
+    private final JobAnalyzer jobAnalyzer;
+    public JobService(JobAnalyzer jobAnalyzer) {
+        this.jobAnalyzer = jobAnalyzer;
+    }
     public Job getSampleJob() {
         return new Job(
                 "字节跳动",

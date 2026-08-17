@@ -23,13 +23,13 @@ public class AnalyzerSandbox {
                 "https://example.com/job/1"
         );
 
-        JobAnalyzer analyzer =
+        /*JobAnalyzer analyzer =
                 new DeepSeekJobAnalyzer();
 
         JobAnalysis analysis =
                 analyzer.analyze(job);
 
         System.out.println("真实AI分析结果：");
-        System.out.println(analysis);
+        System.out.println(analysis);*/
     }
 }

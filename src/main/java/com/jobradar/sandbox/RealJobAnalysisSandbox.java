@@ -30,7 +30,7 @@ public class RealJobAnalysisSandbox {
         System.out.println("地点：" + job.getLocation());
         System.out.println("来源：" + job.getSource());
 
-        JobAnalyzer analyzer = new DeepSeekJobAnalyzer();
+       /* JobAnalyzer analyzer = new DeepSeekJobAnalyzer();
 
         try {
 
@@ -46,6 +46,6 @@ public class RealJobAnalysisSandbox {
             System.out.println(
                     "AI岗位分析失败：" + e.getMessage()
             );
-        }
+        }*/
     }
 }

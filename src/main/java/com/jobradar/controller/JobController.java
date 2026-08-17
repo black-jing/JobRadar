@@ -1,5 +1,6 @@
 package com.jobradar.controller;
 import com.jobradar.domain.Job;
+import com.jobradar.domain.JobAnalysis;
 import org.springframework.web.bind.annotation.GetMapping;
 import com.jobradar.service.JobService;
 import java.time.LocalDate;
@@ -7,9 +8,18 @@ import com.jobradar.dto.JobSearchResponse;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
+import com.jobradar.dto.AnalyzeJobRequest;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 @RestController
 public class JobController {
 
+    @PostMapping("/api/jobs/analyze")
+    public JobAnalysis analyzeJob(
+            @RequestBody AnalyzeJobRequest request) {
+
+        return jobService.analyzeJob(request);
+    }
     @GetMapping("/jobs/sample")
     public Job getSampleJob() {
         return jobService.getSampleJob();
