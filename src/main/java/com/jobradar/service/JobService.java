@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import com.jobradar.analysis.JobAnalyzer;
 import java.util.ArrayList;
 import java.util.List;
+import com.jobradar.repository.JobRepository;
 @Service
 public class JobService {
     public JobAnalysis analyzeJob(AnalyzeJobRequest request) {
@@ -35,8 +36,13 @@ public class JobService {
         }
     }
     private final JobAnalyzer jobAnalyzer;
-    public JobService(JobAnalyzer jobAnalyzer) {
+    private final JobRepository jobRepository;
+    public JobService(
+            JobAnalyzer jobAnalyzer,
+            JobRepository jobRepository) {
+
         this.jobAnalyzer = jobAnalyzer;
+        this.jobRepository = jobRepository;
     }
     public Job getSampleJob() {
         return new Job(
@@ -48,6 +54,23 @@ public class JobService {
                 "JobRadar Test",
                 "https://example.com/job/1"
         );
+    }
+    public Job saveSampleJob() {
+
+        Job job = new Job(
+                "JobRadar Test Company",
+                "Java Backend Intern",
+                "Remote",
+                "用于测试JobRadar数据库持久化",
+                LocalDate.now(),
+                "Database Test",
+                "https://example.com/database-test"
+        );
+
+        return jobRepository.save(job);
+    }
+    public List<Job> getSavedJobs() {
+        return jobRepository.findAll();
     }
     public List<Job> getJobs(String keyword, String location ) {
         System.out.println("Service收到的keyword：" + keyword);

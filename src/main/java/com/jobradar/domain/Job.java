@@ -1,8 +1,14 @@
 package com.jobradar.domain;
-
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
 import java.time.LocalDate;
-
+@Entity
 public class Job {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
     private String company;
     private String title;
     private String location;
@@ -10,7 +16,8 @@ public class Job {
     private LocalDate publishDate;
     private String source;
     private String sourceUrl;
-
+    protected Job() {
+    }
     public Job(
             String company,
             String title,
@@ -28,7 +35,9 @@ public class Job {
         this.sourceUrl = sourceUrl;
 
     }
-
+    public Long getId() {
+        return id;
+    }
     public String getCompany() {
         return company;
     }

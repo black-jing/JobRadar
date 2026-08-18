@@ -20,6 +20,14 @@ public class JobController {
 
         return jobService.analyzeJob(request);
     }
+    @PostMapping("/api/jobs/save-sample")
+    public Job saveSampleJob() {
+        return jobService.saveSampleJob();
+    }
+    @GetMapping("/api/jobs/saved")
+    public List<Job> getSavedJobs() {
+        return jobService.getSavedJobs();
+    }
     @GetMapping("/jobs/sample")
     public Job getSampleJob() {
         return jobService.getSampleJob();
