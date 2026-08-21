@@ -4,6 +4,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import java.time.LocalDate;
+import jakarta.persistence.Column;
 @Entity
 public class Job {
     @Id
@@ -12,6 +13,7 @@ public class Job {
     private String company;
     private String title;
     private String location;
+    @Column(columnDefinition = "TEXT")
     private String description;
     private LocalDate publishDate;
     private String source;

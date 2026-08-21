@@ -48,4 +48,8 @@ public class JobController {
 
         return new JobSearchResponse(jobs.size(), jobs);
     }
+    @PostMapping("/api/jobs/import-one")
+    public Job importOneRealJob() {
+        return jobService.importOneRealJob();
+    }
 }

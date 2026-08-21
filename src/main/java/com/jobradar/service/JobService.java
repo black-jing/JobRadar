@@ -126,4 +126,16 @@ public class JobService {
         System.out.println("关键词筛选后数量：" + resultJobs.size());
         return resultJobs;
     }
+    public Job importOneRealJob() {
+
+        List<Job> jobs = getJobs(null, null);
+
+        if (jobs.isEmpty()) {
+            return null;
+        }
+
+        Job job = jobs.get(0);
+
+        return jobRepository.save(job);
+    }
 }
