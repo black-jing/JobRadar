@@ -1,10 +1,15 @@
 package com.jobradar.dto;
-
+import jakarta.validation.constraints.NotBlank;
 public class AnalyzeJobRequest {
 
     private String company;
+
+    @NotBlank
     private String title;
+
     private String location;
+
+    @NotBlank
     private String description;
     public String getCompany() {
         return company;

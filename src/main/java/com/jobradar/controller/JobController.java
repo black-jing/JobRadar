@@ -11,12 +11,13 @@ import java.util.List;
 import com.jobradar.dto.AnalyzeJobRequest;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import jakarta.validation.Valid;
 @RestController
 public class JobController {
 
     @PostMapping("/api/jobs/analyze")
     public JobAnalysis analyzeJob(
-            @RequestBody AnalyzeJobRequest request) {
+            @Valid @RequestBody AnalyzeJobRequest request) {
 
         return jobService.analyzeJob(request);
     }
@@ -51,5 +52,9 @@ public class JobController {
     @PostMapping("/api/jobs/import-one")
     public Job importOneRealJob() {
         return jobService.importOneRealJob();
+    }
+    @PostMapping("/api/jobs/import-all")
+    public List<Job> importAllRealJobs() {
+        return jobService.importAllRealJobs();
     }
 }

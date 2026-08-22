@@ -18,7 +18,7 @@ import com.jobradar.repository.JobRepository;
 @Service
 public class JobService {
     public JobAnalysis analyzeJob(AnalyzeJobRequest request) {
-
+        System.out.println("进入 JobService.analyzeJob()");
         Job job = new Job(
                 request.getCompany(),
                 request.getTitle(),
@@ -136,6 +136,38 @@ public class JobService {
 
         Job job = jobs.get(0);
 
+        Job existingJob =
+                jobRepository.findBySourceAndSourceUrl(
+                        job.getSource(),
+                        job.getSourceUrl()
+                );
+
+        if (existingJob != null) {
+            return existingJob;
+        }
+
         return jobRepository.save(job);
+    }
+    public List<Job> importAllRealJobs() {
+
+        List<Job> jobs = getJobs(null, null);
+
+        List<Job> savedJobs = new ArrayList<>();
+
+        for (Job job : jobs) {
+
+            Job existingJob =
+                    jobRepository.findBySourceAndSourceUrl(
+                            job.getSource(),
+                            job.getSourceUrl()
+                    );
+
+            if (existingJob == null) {
+                Job savedJob = jobRepository.save(job);
+                savedJobs.add(savedJob);
+            }
+        }
+
+        return savedJobs;
     }
 }
