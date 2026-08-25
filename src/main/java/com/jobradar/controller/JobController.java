@@ -12,6 +12,10 @@ import com.jobradar.dto.AnalyzeJobRequest;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import jakarta.validation.Valid;
+import com.jobradar.domain.JobMatchResult;
+import com.jobradar.domain.UserProfile;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PathVariable;
 @RestController
 public class JobController {
 
@@ -56,5 +60,22 @@ public class JobController {
     @PostMapping("/api/jobs/import-all")
     public List<Job> importAllRealJobs() {
         return jobService.importAllRealJobs();
+    }
+    @PostMapping("/api/jobs/{id}/match")
+    public ResponseEntity<JobMatchResult> matchJob(
+            @PathVariable Long id,
+            @RequestBody UserProfile userProfile) {
+
+        JobMatchResult result =
+                jobService.matchJob(
+                        id,
+                        userProfile
+                );
+
+        if (result == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        return ResponseEntity.ok(result);
     }
 }

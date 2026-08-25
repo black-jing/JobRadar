@@ -1,9 +1,13 @@
 package com.jobradar.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.jobradar.domain.JobAnalysis;
+import com.jobradar.domain.JobMatchResult;
+import com.jobradar.domain.UserProfile;
 import com.jobradar.dto.AnalyzeJobRequest;
 import com.jobradar.domain.Job;
 import java.time.LocalDate;
+
+import com.jobradar.matching.JobMatcher;
 import org.springframework.stereotype.Service;
 import com.jobradar.aggregation.JobAggregator;
 import com.jobradar.cleaning.JobCleaner;
@@ -37,12 +41,15 @@ public class JobService {
     }
     private final JobAnalyzer jobAnalyzer;
     private final JobRepository jobRepository;
+    private final JobMatcher jobMatcher;
     public JobService(
             JobAnalyzer jobAnalyzer,
-            JobRepository jobRepository) {
+            JobRepository jobRepository,
+            JobMatcher jobMatcher) {
 
         this.jobAnalyzer = jobAnalyzer;
         this.jobRepository = jobRepository;
+        this.jobMatcher = jobMatcher;
     }
     public Job getSampleJob() {
         return new Job(
@@ -169,5 +176,22 @@ public class JobService {
         }
 
         return savedJobs;
+    }
+    public JobMatchResult matchJob(
+            Long id,
+            UserProfile userProfile) {
+
+        Job job = jobRepository
+                .findById(id)
+                .orElse(null);
+
+        if (job == null) {
+            return null;
+        }
+
+        return jobMatcher.match(
+                job,
+                userProfile
+        );
     }
 }
