@@ -6,7 +6,8 @@ import com.jobradar.domain.UserProfile;
 import com.jobradar.dto.AnalyzeJobRequest;
 import com.jobradar.domain.Job;
 import java.time.LocalDate;
-
+import com.jobradar.domain.JobRecommendation;
+import java.util.Comparator;
 import com.jobradar.matching.JobMatcher;
 import org.springframework.stereotype.Service;
 import com.jobradar.aggregation.JobAggregator;
@@ -192,6 +193,71 @@ public class JobService {
         return jobMatcher.match(
                 job,
                 userProfile
+        );
+    }
+    public List<JobRecommendation> recommendJobs(
+            List<Long> jobIds,
+            UserProfile userProfile,
+            int topN) {
+        if (jobIds == null
+                || jobIds.size() < 3
+                || jobIds.size() > 5) {
+
+            throw new IllegalArgumentException(
+                    "第一版推荐只允许选择3到5个岗位"
+            );
+        }
+        List<Job> jobs =
+                jobRepository.findAllById(jobIds);
+        List<JobRecommendation> recommendations =
+                new ArrayList<>();
+        for (Job job : jobs) {
+
+            try {
+
+                JobMatchResult matchResult =
+                        jobMatcher.match(
+                                job,
+                                userProfile
+                        );
+
+                JobRecommendation recommendation =
+                        new JobRecommendation(
+                                job,
+                                matchResult
+                        );
+
+                recommendations.add(
+                        recommendation
+                );
+
+            } catch (RuntimeException e) {
+
+                System.out.println(
+                        "岗位匹配失败，jobId="
+                                + job.getId()
+                                + "，跳过该岗位"
+                );
+            }
+        }
+        recommendations.sort(
+                Comparator.comparingInt(
+                        (JobRecommendation recommendation) ->
+                                recommendation
+                                        .getMatchResult()
+                                        .getScore()
+                ).reversed()
+        );
+        int limit =
+                Math.min(
+                        topN,
+                        recommendations.size()
+                );
+        return new ArrayList<>(
+                recommendations.subList(
+                        0,
+                        limit
+                )
         );
     }
 }

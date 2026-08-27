@@ -16,6 +16,8 @@ import com.jobradar.domain.JobMatchResult;
 import com.jobradar.domain.UserProfile;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
+import com.jobradar.dto.RecommendJobsRequest;
+import com.jobradar.domain.JobRecommendation;
 @RestController
 public class JobController {
 
@@ -77,5 +79,15 @@ public class JobController {
         }
 
         return ResponseEntity.ok(result);
+    }
+    @PostMapping("/api/jobs/recommend")
+    public List<JobRecommendation> recommendJobs(
+            @RequestBody RecommendJobsRequest request) {
+
+        return jobService.recommendJobs(
+                request.getJobIds(),
+                request.getUserProfile(),
+                request.getTopN()
+        );
     }
 }

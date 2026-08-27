@@ -41,11 +41,27 @@ public class DeepSeekJobMatcher implements JobMatcher {
                 你的任务是根据岗位事实和用户明确提供的画像信息，
                 判断用户与岗位的匹配情况。
 
-                匹配时只考虑：
-                1. 用户目标方向是否与岗位方向吻合；
-                2. 用户已有技能与岗位明确要求的技能；
-                3. 岗位明确要求、但用户资料中没有体现的主要能力缺口；
-                4. 给出简短的匹配原因和行动建议。
+                匹配和评分时，所有岗位都必须使用同一套判断标准，
+                不要因为岗位不同临时改变评分尺度：
+                
+                1. 目标方向匹配：
+                   用户的targetDirection与岗位主要方向是否吻合；
+                
+                2. 技能匹配：
+                   用户的skills与岗位明确要求的技能匹配程度；
+                
+                3. 经历关联：
+                   用户的experienceSummary与岗位职责、岗位要求的关联程度；
+                
+                4. 主要能力缺口：
+                   岗位明确要求、但用户资料中没有体现的关键能力。
+                
+                score为0到100的业务参考匹配分数，
+                综合以上维度判断，并始终使用同一尺度：
+                
+                80到100：整体匹配较高；
+                60到79：有一定匹配，但存在明显缺口；
+                0到59：方向、技能或经历关联相对较弱。
 
                 必须遵守：
                 - 只能依据提供的岗位事实和用户画像；
@@ -197,6 +213,7 @@ public class DeepSeekJobMatcher implements JobMatcher {
                     mapper.readTree(content);
 
             if (!matchJson.has("score")
+                    || !matchJson.path("score").isIntegralNumber()
                     || !matchJson.path("matchedSkills").isArray()
                     || !matchJson.path("gaps").isArray()
                     || matchJson.path("reason").asText().isBlank()
@@ -210,7 +227,11 @@ public class DeepSeekJobMatcher implements JobMatcher {
             int score = matchJson
                     .path("score")
                     .asInt();
-
+            if (score < 0 || score > 100) {
+                throw new RuntimeException(
+                        "模型返回的score超出0到100范围：" + score
+                );
+            }
             String reason = matchJson
                     .path("reason")
                     .asText();
