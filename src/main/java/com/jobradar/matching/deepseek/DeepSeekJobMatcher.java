@@ -17,7 +17,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.ArrayList;
 import java.util.List;
-
+import java.time.Duration;
 @Component
 public class DeepSeekJobMatcher implements JobMatcher {
 
@@ -166,6 +166,7 @@ public class DeepSeekJobMatcher implements JobMatcher {
                             "Content-Type",
                             "application/json"
                     )
+                    .timeout(Duration.ofSeconds(30))
                     .header(
                             "Authorization",
                             "Bearer " + apiKey
