@@ -20,6 +20,15 @@ import com.jobradar.analysis.JobAnalyzer;
 import java.util.ArrayList;
 import java.util.List;
 import com.jobradar.repository.JobRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.data.redis.core.StringRedisTemplate;
+
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
+import java.util.HexFormat;
 @Service
 public class JobService {
     public JobAnalysis analyzeJob(AnalyzeJobRequest request) {
@@ -43,14 +52,22 @@ public class JobService {
     private final JobAnalyzer jobAnalyzer;
     private final JobRepository jobRepository;
     private final JobMatcher jobMatcher;
+    private final StringRedisTemplate stringRedisTemplate;
+    private final ObjectMapper objectMapper;
+    private static final Duration JOB_ANALYSIS_CACHE_TTL =
+            Duration.ofHours(24);
     public JobService(
             JobAnalyzer jobAnalyzer,
             JobRepository jobRepository,
-            JobMatcher jobMatcher) {
+            JobMatcher jobMatcher,
+            StringRedisTemplate stringRedisTemplate,
+            ObjectMapper objectMapper) {
 
         this.jobAnalyzer = jobAnalyzer;
         this.jobRepository = jobRepository;
         this.jobMatcher = jobMatcher;
+        this.stringRedisTemplate = stringRedisTemplate;
+        this.objectMapper = objectMapper;
     }
     public Job getSampleJob() {
         return new Job(
