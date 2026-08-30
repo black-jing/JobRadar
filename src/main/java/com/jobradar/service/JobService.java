@@ -32,7 +32,9 @@ import java.util.HexFormat;
 @Service
 public class JobService {
     public JobAnalysis analyzeJob(AnalyzeJobRequest request) {
+
         System.out.println("进入 JobService.analyzeJob()");
+
         Job job = new Job(
                 request.getCompany(),
                 request.getTitle(),
@@ -43,10 +45,93 @@ public class JobService {
                 null
         );
 
+        String cacheKey =
+                buildJobAnalysisCacheKey(job);
+
+        System.out.println(
+                "JobAnalysis cache key: " + cacheKey
+        );
+
+        String cachedValue =
+                stringRedisTemplate
+                        .opsForValue()
+                        .get(cacheKey);
+
         try {
-            return jobAnalyzer.analyze(job);
+
+            if (cachedValue != null) {
+
+                System.out.println("CACHE HIT");
+
+                return objectMapper.readValue(
+                        cachedValue,
+                        JobAnalysis.class
+                );
+            }
+
+            System.out.println("CACHE MISS");
+
+            JobAnalysis analysis =
+                    jobAnalyzer.analyze(job);
+
+            String analysisJson =
+                    objectMapper.writeValueAsString(
+                            analysis
+                    );
+
+            stringRedisTemplate
+                    .opsForValue()
+                    .set(
+                            cacheKey,
+                            analysisJson,
+                            JOB_ANALYSIS_CACHE_TTL
+                    );
+
+            return analysis;
+
         } catch (JsonProcessingException e) {
-            throw new RuntimeException("岗位分析失败", e);
+
+            throw new RuntimeException(
+                    "岗位分析或缓存JSON处理失败",
+                    e
+            );
+        }
+    }
+    private String buildJobAnalysisCacheKey(Job job) {
+
+        String rawKey =
+                String.valueOf(job.getCompany())
+                        + "\n"
+                        + String.valueOf(job.getTitle())
+                        + "\n"
+                        + String.valueOf(job.getLocation())
+                        + "\n"
+                        + String.valueOf(job.getDescription());
+
+        try {
+
+            MessageDigest digest =
+                    MessageDigest.getInstance(
+                            "SHA-256"
+                    );
+
+            byte[] hash =
+                    digest.digest(
+                            rawKey.getBytes(
+                                    StandardCharsets.UTF_8
+                            )
+                    );
+
+            return "job:analysis:v1:"
+                    + HexFormat.of()
+                    .formatHex(hash);
+
+        } catch (NoSuchAlgorithmException e) {
+
+            throw new IllegalStateException(
+                    "无法生成JobAnalysis缓存Key",
+                    e
+            );
         }
     }
     private final JobAnalyzer jobAnalyzer;
