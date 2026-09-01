@@ -18,6 +18,14 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
 import com.jobradar.dto.RecommendJobsRequest;
 import com.jobradar.domain.JobRecommendation;
+import com.jobradar.domain.ApplicationStatus;
+import com.jobradar.domain.JobApplication;
+import com.jobradar.domain.ApplicationStatus;
+import com.jobradar.domain.JobApplication;
+import org.springframework.http.HttpStatus;
+
+import java.util.NoSuchElementException;
+import org.springframework.web.bind.annotation.PatchMapping;
 @RestController
 public class JobController {
 
@@ -89,5 +97,97 @@ public class JobController {
                 request.getUserProfile(),
                 request.getTopN()
         );
+    }
+    @PostMapping("/api/jobs/{id}/application")
+    public ResponseEntity<JobApplication> saveApplication(
+            @PathVariable Long id,
+            @RequestParam ApplicationStatus status) {
+
+        JobApplication application =
+                jobService.saveApplication(
+                        id,
+                        status
+                );
+
+        if (application == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        return ResponseEntity.ok(application);
+    }
+    @PostMapping("/api/jobs/{id}/application")
+    public ResponseEntity<JobApplication> createApplication(
+            @PathVariable Long id,
+            @RequestParam ApplicationStatus status) {
+
+        try {
+
+            JobApplication application =
+                    jobService.createApplication(
+                            id,
+                            status
+                    );
+
+            return ResponseEntity
+                    .status(HttpStatus.CREATED)
+                    .body(application);
+
+        } catch (NoSuchElementException e) {
+
+            return ResponseEntity
+                    .notFound()
+                    .build();
+
+        } catch (IllegalStateException
+                 | IllegalArgumentException e) {
+
+            return ResponseEntity
+                    .badRequest()
+                    .build();
+        }
+    }
+    @GetMapping("/api/jobs/{id}/application")
+    public ResponseEntity<JobApplication> getApplication(
+            @PathVariable Long id) {
+
+        try {
+
+            return ResponseEntity.ok(
+                    jobService.getApplication(id)
+            );
+
+        } catch (NoSuchElementException e) {
+
+            return ResponseEntity
+                    .notFound()
+                    .build();
+        }
+    }
+    @PatchMapping("/api/jobs/{id}/application/status")
+    public ResponseEntity<JobApplication> updateApplicationStatus(
+            @PathVariable Long id,
+            @RequestParam ApplicationStatus status) {
+
+        try {
+
+            return ResponseEntity.ok(
+                    jobService.updateApplicationStatus(
+                            id,
+                            status
+                    )
+            );
+
+        } catch (NoSuchElementException e) {
+
+            return ResponseEntity
+                    .notFound()
+                    .build();
+
+        } catch (IllegalArgumentException e) {
+
+            return ResponseEntity
+                    .badRequest()
+                    .build();
+        }
     }
 }

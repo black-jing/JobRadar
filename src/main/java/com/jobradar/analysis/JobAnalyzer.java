@@ -7,4 +7,5 @@ import com.jobradar.domain.JobAnalysis;
 public interface JobAnalyzer {
 
     JobAnalysis analyze(Job job) throws JsonProcessingException;
+    String getPromptVersion();
 }

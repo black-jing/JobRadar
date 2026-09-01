@@ -16,5 +16,8 @@ public class MockJobAnalyzer implements JobAnalyzer {
                 "这是一个Java后端岗位，主要负责后端服务开发。"
         );
     }
-
+    @Override
+    public String getPromptVersion() {
+        return "mock-v1";
+    }
 }

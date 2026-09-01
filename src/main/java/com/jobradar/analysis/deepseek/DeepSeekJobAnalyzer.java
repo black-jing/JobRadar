@@ -28,6 +28,12 @@ public class DeepSeekJobAnalyzer implements JobAnalyzer {
         this.apiUrl = apiUrl;
         this.model = model;
     }
+    private static final String PROMPT_VERSION =
+            "analysis-prompt-v2";
+    @Override
+    public String getPromptVersion() {
+        return PROMPT_VERSION;
+    }
     @Override
     public JobAnalysis analyze(Job job) throws JsonProcessingException {
         String systemPrompt = """

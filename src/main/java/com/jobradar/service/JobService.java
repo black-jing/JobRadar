@@ -29,6 +29,14 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.HexFormat;
+import com.jobradar.domain.ApplicationStatus;
+import com.jobradar.domain.JobApplication;
+import com.jobradar.repository.JobApplicationRepository;
+import com.jobradar.domain.ApplicationStatus;
+import com.jobradar.domain.JobApplication;
+import com.jobradar.repository.JobApplicationRepository;
+
+import java.util.NoSuchElementException;
 @Service
 public class JobService {
     public JobAnalysis analyzeJob(AnalyzeJobRequest request) {
@@ -122,7 +130,9 @@ public class JobService {
                             )
                     );
 
-            return "job:analysis:v1:"
+            return "job:analysis:"
+                    + jobAnalyzer.getPromptVersion()
+                    + ":"
                     + HexFormat.of()
                     .formatHex(hash);
 
@@ -141,15 +151,19 @@ public class JobService {
     private final ObjectMapper objectMapper;
     private static final Duration JOB_ANALYSIS_CACHE_TTL =
             Duration.ofHours(24);
+    private final JobApplicationRepository jobApplicationRepository;
+
     public JobService(
             JobAnalyzer jobAnalyzer,
             JobRepository jobRepository,
+            JobApplicationRepository jobApplicationRepository,
             JobMatcher jobMatcher,
             StringRedisTemplate stringRedisTemplate,
             ObjectMapper objectMapper) {
 
         this.jobAnalyzer = jobAnalyzer;
         this.jobRepository = jobRepository;
+        this.jobApplicationRepository = jobApplicationRepository;
         this.jobMatcher = jobMatcher;
         this.stringRedisTemplate = stringRedisTemplate;
         this.objectMapper = objectMapper;
@@ -361,5 +375,148 @@ public class JobService {
                         limit
                 )
         );
+    }
+    public JobApplication saveApplication(
+            Long jobId,
+            ApplicationStatus status) {
+
+        Job job = jobRepository
+                .findById(jobId)
+                .orElse(null);
+
+        if (job == null) {
+            return null;
+        }
+
+        JobApplication application =
+                jobApplicationRepository
+                        .findByJob_Id(jobId);
+
+        if (application == null) {
+
+            application =
+                    new JobApplication(
+                            job,
+                            status
+                    );
+
+        } else {
+
+            application.updateStatus(status);
+        }
+
+        return jobApplicationRepository
+                .save(application);
+    }
+    public JobApplication createApplication(
+            Long jobId,
+            ApplicationStatus status) {
+
+        Job job = jobRepository
+                .findById(jobId)
+                .orElseThrow(
+                        () -> new NoSuchElementException(
+                                "岗位不存在，jobId=" + jobId
+                        )
+                );
+
+        if (jobApplicationRepository
+                .findByJob_Id(jobId)
+                .isPresent()) {
+
+            throw new IllegalStateException(
+                    "该岗位已经存在投递记录"
+            );
+        }
+
+        if (status != ApplicationStatus.SAVED
+                && status != ApplicationStatus.APPLIED) {
+
+            throw new IllegalArgumentException(
+                    "新建投递记录时，初始状态只能是SAVED或APPLIED"
+            );
+        }
+
+        JobApplication application =
+                new JobApplication(
+                        job,
+                        status
+                );
+
+        return jobApplicationRepository.save(application);
+    }
+
+
+    public JobApplication getApplication(
+            Long jobId) {
+
+        return jobApplicationRepository
+                .findByJob_Id(jobId)
+                .orElseThrow(
+                        () -> new NoSuchElementException(
+                                "该岗位暂无投递记录，jobId=" + jobId
+                        )
+                );
+    }
+
+
+    public JobApplication updateApplicationStatus(
+            Long jobId,
+            ApplicationStatus newStatus) {
+
+        JobApplication application =
+                jobApplicationRepository
+                        .findByJob_Id(jobId)
+                        .orElseThrow(
+                                () -> new NoSuchElementException(
+                                        "该岗位暂无投递记录，jobId=" + jobId
+                                )
+                        );
+
+        ApplicationStatus currentStatus =
+                application.getStatus();
+
+        if (currentStatus == newStatus) {
+            return application;
+        }
+
+        if (!isValidStatusTransition(
+                currentStatus,
+                newStatus)) {
+
+            throw new IllegalArgumentException(
+                    "不允许的状态变化："
+                            + currentStatus
+                            + " -> "
+                            + newStatus
+            );
+        }
+
+        application.updateStatus(newStatus);
+
+        return jobApplicationRepository.save(application);
+    }
+
+
+    private boolean isValidStatusTransition(
+            ApplicationStatus currentStatus,
+            ApplicationStatus newStatus) {
+
+        return switch (currentStatus) {
+
+            case SAVED ->
+                    newStatus == ApplicationStatus.APPLIED;
+
+            case APPLIED ->
+                    newStatus == ApplicationStatus.INTERVIEW
+                            || newStatus == ApplicationStatus.OFFER
+                            || newStatus == ApplicationStatus.REJECTED;
+
+            case INTERVIEW ->
+                    newStatus == ApplicationStatus.OFFER
+                            || newStatus == ApplicationStatus.REJECTED;
+
+            case OFFER, REJECTED -> false;
+        };
     }
 }
