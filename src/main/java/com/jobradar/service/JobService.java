@@ -376,38 +376,7 @@ public class JobService {
                 )
         );
     }
-    public JobApplication saveApplication(
-            Long jobId,
-            ApplicationStatus status) {
 
-        Job job = jobRepository
-                .findById(jobId)
-                .orElse(null);
-
-        if (job == null) {
-            return null;
-        }
-
-        JobApplication application =
-                jobApplicationRepository
-                        .findByJob_Id(jobId);
-
-        if (application == null) {
-
-            application =
-                    new JobApplication(
-                            job,
-                            status
-                    );
-
-        } else {
-
-            application.updateStatus(status);
-        }
-
-        return jobApplicationRepository
-                .save(application);
-    }
     public JobApplication createApplication(
             Long jobId,
             ApplicationStatus status) {

@@ -98,23 +98,7 @@ public class JobController {
                 request.getTopN()
         );
     }
-    @PostMapping("/api/jobs/{id}/application")
-    public ResponseEntity<JobApplication> saveApplication(
-            @PathVariable Long id,
-            @RequestParam ApplicationStatus status) {
 
-        JobApplication application =
-                jobService.saveApplication(
-                        id,
-                        status
-                );
-
-        if (application == null) {
-            return ResponseEntity.notFound().build();
-        }
-
-        return ResponseEntity.ok(application);
-    }
     @PostMapping("/api/jobs/{id}/application")
     public ResponseEntity<JobApplication> createApplication(
             @PathVariable Long id,
