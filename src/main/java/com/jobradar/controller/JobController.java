@@ -26,7 +26,11 @@ import org.springframework.http.HttpStatus;
 
 import java.util.NoSuchElementException;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.CrossOrigin;
 @RestController
+
+@CrossOrigin(origins = "http://localhost:5173")
+
 public class JobController {
 
     @PostMapping("/api/jobs/analyze")
