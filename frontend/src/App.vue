@@ -45,6 +45,226 @@ const applicationErrorByJobId = ref({})
  */
 const applicationOperatingJobId = ref(null)
 
+/*
+ * =========================
+ * 用户画像状态
+ * =========================
+ */
+const profile = ref({
+  targetDirection: '',
+  skillsInput: '',
+  experienceSummary: ''
+})
+const profileLoading = ref(true)
+const profileSaving = ref(false)
+const profileError = ref('')
+const profileSuccess = ref('')
+
+/*
+ * =========================
+ * 岗位匹配与推荐状态
+ * =========================
+ */
+const matchByJobId = ref({})
+const matchingByJobId = ref({})
+const matchErrorByJobId = ref({})
+const selectedJobIds = ref([])
+const selectionMessage = ref('')
+const recommendations = ref([])
+const recommending = ref(false)
+const recommendationError = ref('')
+
+
+/*
+ * =========================
+ * 加载用户画像
+ * =========================
+ */
+async function loadProfile() {
+  profileError.value = ''
+
+  try {
+    const response = await fetch(
+      'http://localhost:8080/api/profile'
+    )
+
+    if (response.status === 404) {
+      return
+    }
+
+    if (!response.ok) {
+      throw new Error(`HTTP错误：${response.status}`)
+    }
+
+    const result = await response.json()
+
+    profile.value = {
+      targetDirection: result.targetDirection || '',
+      skillsInput: (result.skills || []).join(', '),
+      experienceSummary: result.experienceSummary || ''
+    }
+
+  } catch (e) {
+    profileError.value = `加载用户画像失败：${e.message}`
+  } finally {
+    profileLoading.value = false
+  }
+}
+
+
+/*
+ * =========================
+ * 保存用户画像
+ * =========================
+ */
+async function saveProfile() {
+  profileSaving.value = true
+  profileError.value = ''
+  profileSuccess.value = ''
+
+  const skills = profile.value.skillsInput
+    .split(/[\n,，]/)
+    .map(skill => skill.trim())
+    .filter(skill => skill)
+
+  try {
+    const response = await fetch(
+      'http://localhost:8080/api/profile',
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          targetDirection: profile.value.targetDirection,
+          skills,
+          experienceSummary: profile.value.experienceSummary
+        })
+      }
+    )
+
+    if (!response.ok) {
+      throw new Error(`HTTP错误：${response.status}`)
+    }
+
+    const result = await response.json()
+
+    profile.value = {
+      targetDirection: result.targetDirection || '',
+      skillsInput: (result.skills || []).join(', '),
+      experienceSummary: result.experienceSummary || ''
+    }
+    profileSuccess.value = '用户画像已保存'
+
+  } catch (e) {
+    profileError.value = `保存用户画像失败：${e.message}`
+  } finally {
+    profileSaving.value = false
+  }
+}
+
+
+/*
+ * =========================
+ * 单岗位匹配
+ * =========================
+ */
+async function matchJob(jobId) {
+  matchingByJobId.value[jobId] = true
+  matchErrorByJobId.value[jobId] = ''
+
+  try {
+    const response = await fetch(
+      `http://localhost:8080/api/jobs/${jobId}/match`,
+      {
+        method: 'POST'
+      }
+    )
+
+    if (response.status === 400) {
+      throw new Error('请先保存用户画像')
+    }
+
+    if (!response.ok) {
+      throw new Error(`HTTP错误：${response.status}`)
+    }
+
+    matchByJobId.value[jobId] = await response.json()
+
+  } catch (e) {
+    matchErrorByJobId.value[jobId] = e.message
+  } finally {
+    matchingByJobId.value[jobId] = false
+  }
+}
+
+
+/*
+ * =========================
+ * 多岗位选择与推荐
+ * =========================
+ */
+function toggleJobSelection(jobId, selected) {
+  if (!selected) {
+    selectedJobIds.value = selectedJobIds.value.filter(
+      id => id !== jobId
+    )
+    selectionMessage.value = ''
+    return
+  }
+
+  if (selectedJobIds.value.length >= 5) {
+    selectionMessage.value = '最多只能选择 5 个岗位'
+    return
+  }
+
+  selectedJobIds.value.push(jobId)
+  selectionMessage.value = ''
+}
+
+async function recommendJobs() {
+  recommendationError.value = ''
+  recommendations.value = []
+
+  if (selectedJobIds.value.length < 3) {
+    recommendationError.value = '请至少选择 3 个岗位'
+    return
+  }
+
+  recommending.value = true
+
+  try {
+    const response = await fetch(
+      'http://localhost:8080/api/jobs/recommend',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          jobIds: selectedJobIds.value,
+          topN: selectedJobIds.value.length
+        })
+      }
+    )
+
+    if (response.status === 400) {
+      throw new Error('请确认已保存用户画像并选择 3 到 5 个岗位')
+    }
+
+    if (!response.ok) {
+      throw new Error(`HTTP错误：${response.status}`)
+    }
+
+    recommendations.value = await response.json()
+
+  } catch (e) {
+    recommendationError.value = e.message
+  } finally {
+    recommending.value = false
+  }
+}
+
 
 /*
  * =========================
@@ -328,6 +548,7 @@ async function analyzeJob(job) {
  */
 onMounted(() => {
   loadJobs()
+  loadProfile()
 })
 </script>
 
@@ -339,6 +560,73 @@ onMounted(() => {
       <h1>JobRadar</h1>
       <p>AI 实习情报助手</p>
     </header>
+
+
+    <!-- =========================
+         我的画像
+         ========================= -->
+
+    <section class="profile-section">
+
+      <h2>我的画像</h2>
+
+      <p v-if="profileLoading">
+        正在加载用户画像...
+      </p>
+
+      <form
+        v-else
+        @submit.prevent="saveProfile"
+      >
+
+        <label>
+          目标方向
+          <input
+            v-model="profile.targetDirection"
+            required
+          >
+        </label>
+
+        <label>
+          技能（用逗号或换行分隔）
+          <textarea
+            v-model="profile.skillsInput"
+            required
+          ></textarea>
+        </label>
+
+        <label>
+          经历描述
+          <textarea
+            v-model="profile.experienceSummary"
+            required
+          ></textarea>
+        </label>
+
+        <button
+          type="submit"
+          :disabled="profileSaving"
+        >
+          {{ profileSaving ? '保存中...' : '保存画像' }}
+        </button>
+
+      </form>
+
+      <p
+        v-if="profileSuccess"
+        class="success"
+      >
+        {{ profileSuccess }}
+      </p>
+
+      <p
+        v-if="profileError"
+        class="error"
+      >
+        {{ profileError }}
+      </p>
+
+    </section>
 
 
     <!-- =========================
@@ -372,6 +660,87 @@ onMounted(() => {
       <p class="job-count">
         共 {{ jobs.length }} 个岗位
       </p>
+
+      <div class="recommend-actions">
+        <span>已选择 {{ selectedJobIds.length }} / 5</span>
+
+        <button
+          :disabled="
+            recommending ||
+            selectedJobIds.length < 3
+          "
+          @click="recommendJobs"
+        >
+          {{ recommending ? '比较中...' : 'AI比较已选岗位' }}
+        </button>
+      </div>
+
+      <p
+        v-if="selectionMessage"
+        class="analysis-error"
+      >
+        {{ selectionMessage }}
+      </p>
+
+      <p
+        v-if="recommendationError"
+        class="analysis-error"
+      >
+        推荐失败：{{ recommendationError }}
+      </p>
+
+      <section
+        v-if="recommendations.length"
+        class="recommendation-result"
+      >
+
+        <h2>AI 比较结果</h2>
+
+        <article
+          v-for="recommendation in recommendations"
+          :key="recommendation.jobId"
+          class="recommendation-card"
+        >
+
+          <h3>
+            {{ recommendation.title }}
+          </h3>
+
+          <p>
+            {{ recommendation.company }}
+            <span v-if="recommendation.location">
+              · {{ recommendation.location }}
+            </span>
+          </p>
+
+          <p>
+            <strong>匹配分数：</strong>
+            {{ recommendation.matchResult.score }}
+          </p>
+
+          <p>
+            <strong>匹配技能：</strong>
+            {{ recommendation.matchResult.matchedSkills.join('、') || '暂无' }}
+          </p>
+
+          <p>
+            <strong>能力缺口：</strong>
+            {{ recommendation.matchResult.gaps.join('、') || '暂无' }}
+          </p>
+
+          <p>
+            <strong>匹配说明：</strong>
+            {{ recommendation.matchResult.reason }}
+          </p>
+
+          <p>
+            <strong>建议：</strong>
+            {{ recommendation.matchResult.suggestion }}
+          </p>
+
+        </article>
+
+      </section>
 
 
       <div class="job-list">
@@ -420,6 +789,20 @@ onMounted(() => {
 
           <div class="job-actions">
 
+            <label class="select-job">
+              <input
+                type="checkbox"
+                :checked="selectedJobIds.includes(job.id)"
+                @change="
+                  toggleJobSelection(
+                    job.id,
+                    $event.target.checked
+                  )
+                "
+              >
+              选择比较
+            </label>
+
             <a
               v-if="job.sourceUrl"
               :href="job.sourceUrl"
@@ -450,6 +833,64 @@ onMounted(() => {
               }}
 
             </button>
+
+            <button
+              class="match-button"
+              :disabled="matchingByJobId[job.id]"
+              @click="matchJob(job.id)"
+            >
+              {{
+                matchingByJobId[job.id]
+                  ? '匹配中...'
+                  : '匹配我'
+              }}
+            </button>
+
+          </div>
+
+
+          <!-- =========================
+               AI岗位匹配
+               ========================= -->
+
+          <p
+            v-if="matchErrorByJobId[job.id]"
+            class="analysis-error"
+          >
+            匹配失败：{{ matchErrorByJobId[job.id] }}
+          </p>
+
+          <div
+            v-if="matchByJobId[job.id]"
+            class="match-result"
+          >
+
+            <h3>我与该岗位的匹配</h3>
+
+            <p>
+              <strong>匹配分数：</strong>
+              {{ matchByJobId[job.id].score }}
+            </p>
+
+            <p>
+              <strong>匹配技能：</strong>
+              {{ matchByJobId[job.id].matchedSkills.join('、') || '暂无' }}
+            </p>
+
+            <p>
+              <strong>能力缺口：</strong>
+              {{ matchByJobId[job.id].gaps.join('、') || '暂无' }}
+            </p>
+
+            <p>
+              <strong>匹配说明：</strong>
+              {{ matchByJobId[job.id].reason }}
+            </p>
+
+            <p>
+              <strong>建议：</strong>
+              {{ matchByJobId[job.id].suggestion }}
+            </p>
 
           </div>
 
@@ -803,6 +1244,70 @@ onMounted(() => {
 }
 
 
+.profile-section,
+.recommendation-result {
+  margin-bottom: 24px;
+  padding: 20px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+}
+
+
+.profile-section h2,
+.recommendation-result h2 {
+  margin-top: 0;
+}
+
+
+.profile-section form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+
+.profile-section label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+
+.profile-section input,
+.profile-section textarea {
+  padding: 8px;
+  font: inherit;
+}
+
+
+.profile-section textarea {
+  min-height: 72px;
+}
+
+
+.recommend-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+
+.recommendation-card,
+.match-result {
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+}
+
+
+.recommendation-card h3,
+.match-result h3 {
+  margin-top: 0;
+}
+
+
 .job-count {
   margin-bottom: 16px;
 }
@@ -844,6 +1349,14 @@ onMounted(() => {
 .job-actions {
   display: flex;
   gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+
+.select-job {
+  display: flex;
+  gap: 4px;
   align-items: center;
 }
 
@@ -921,6 +1434,11 @@ onMounted(() => {
 
 .analysis-error {
   margin-top: 12px;
+}
+
+
+.success {
+  color: #167a32;
 }
 
 
