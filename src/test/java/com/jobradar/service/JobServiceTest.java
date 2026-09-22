@@ -48,6 +48,9 @@ class JobServiceTest {
     @Mock
     private ObjectMapper objectMapper;
 
+    @Mock
+    private UserProfileService userProfileService;
+
     @InjectMocks
     private JobService jobService;
 
@@ -168,5 +171,103 @@ class JobServiceTest {
 
         verify(jobApplicationRepository)
                 .save(application);
+    }
+
+    @Test
+    void createApplicationShouldFailWhenApplicationAlreadyExists() {
+
+        Long jobId = 1L;
+        Job job = createJob();
+        JobApplication application = new JobApplication(
+                job,
+                ApplicationStatus.SAVED
+        );
+
+        when(jobRepository.findById(jobId))
+                .thenReturn(Optional.of(job));
+        when(jobApplicationRepository.findByJob_Id(jobId))
+                .thenReturn(Optional.of(application));
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> jobService.createApplication(
+                        jobId,
+                        ApplicationStatus.SAVED
+                )
+        );
+    }
+
+    @Test
+    void createApplicationShouldFailWhenInitialStatusIsInterview() {
+
+        Long jobId = 1L;
+
+        when(jobRepository.findById(jobId))
+                .thenReturn(Optional.of(createJob()));
+        when(jobApplicationRepository.findByJob_Id(jobId))
+                .thenReturn(Optional.empty());
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> jobService.createApplication(
+                        jobId,
+                        ApplicationStatus.INTERVIEW
+                )
+        );
+    }
+
+    @Test
+    void updateApplicationStatusShouldFailForSavedToOffer() {
+
+        Long jobId = 1L;
+        JobApplication application = new JobApplication(
+                createJob(),
+                ApplicationStatus.SAVED
+        );
+
+        when(jobApplicationRepository.findByJob_Id(jobId))
+                .thenReturn(Optional.of(application));
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> jobService.updateApplicationStatus(
+                        jobId,
+                        ApplicationStatus.OFFER
+                )
+        );
+    }
+
+    @Test
+    void updateApplicationStatusShouldFailWhenOfferIsChanged() {
+
+        Long jobId = 1L;
+        JobApplication application = new JobApplication(
+                createJob(),
+                ApplicationStatus.OFFER
+        );
+
+        when(jobApplicationRepository.findByJob_Id(jobId))
+                .thenReturn(Optional.of(application));
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> jobService.updateApplicationStatus(
+                        jobId,
+                        ApplicationStatus.REJECTED
+                )
+        );
+    }
+
+    private Job createJob() {
+
+        return new Job(
+                "字节跳动",
+                "Java后端实习生",
+                "北京",
+                "负责Java后端开发",
+                LocalDate.of(2026, 9, 1),
+                "Remotive",
+                "https://example.com/job/1"
+        );
     }
 }

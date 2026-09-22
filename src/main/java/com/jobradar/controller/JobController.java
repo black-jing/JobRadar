@@ -13,7 +13,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import jakarta.validation.Valid;
 import com.jobradar.domain.JobMatchResult;
-import com.jobradar.domain.UserProfile;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
 import com.jobradar.dto.RecommendJobsRequest;
@@ -110,30 +109,47 @@ public class JobController {
     }
     @PostMapping("/api/jobs/{id}/match")
     public ResponseEntity<JobMatchResult> matchJob(
-            @PathVariable Long id,
-            @RequestBody UserProfile userProfile) {
+            @PathVariable Long id) {
 
-        JobMatchResult result =
-                jobService.matchJob(
-                        id,
-                        userProfile
-                );
+        try {
 
-        if (result == null) {
-            return ResponseEntity.notFound().build();
+            JobMatchResult result =
+                    jobService.matchJob(id);
+
+            if (result == null) {
+                return ResponseEntity.notFound().build();
+            }
+
+            return ResponseEntity.ok(result);
+
+        } catch (IllegalStateException e) {
+
+            return ResponseEntity
+                    .badRequest()
+                    .build();
         }
-
-        return ResponseEntity.ok(result);
     }
     @PostMapping("/api/jobs/recommend")
-    public List<JobRecommendation> recommendJobs(
+    public ResponseEntity<List<JobRecommendation>> recommendJobs(
+            @Valid
             @RequestBody RecommendJobsRequest request) {
 
-        return jobService.recommendJobs(
-                request.getJobIds(),
-                request.getUserProfile(),
-                request.getTopN()
-        );
+        try {
+
+            return ResponseEntity.ok(
+                    jobService.recommendJobs(
+                            request.getJobIds(),
+                            request.getTopN()
+                    )
+            );
+
+        } catch (IllegalArgumentException
+                 | IllegalStateException e) {
+
+            return ResponseEntity
+                    .badRequest()
+                    .build();
+        }
     }
 
     @PostMapping("/api/jobs/{id}/application")
