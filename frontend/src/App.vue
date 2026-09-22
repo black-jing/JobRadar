@@ -9,6 +9,13 @@ import { ref, onMounted } from 'vue'
 const jobs = ref([])
 const loading = ref(true)
 const error = ref('')
+const keyword = ref('')
+const location = ref('')
+const source = ref('')
+const page = ref(0)
+const size = ref(10)
+const totalElements = ref(0)
+const totalPages = ref(0)
 
 /*
  * =========================
@@ -272,16 +279,42 @@ async function recommendJobs() {
  * =========================
  */
 async function loadJobs() {
+  loading.value = true
+  error.value = ''
+
+  const query = new URLSearchParams({
+    page: String(page.value),
+    size: String(size.value)
+  })
+
+  if (keyword.value.trim()) {
+    query.set('keyword', keyword.value.trim())
+  }
+
+  if (location.value.trim()) {
+    query.set('location', location.value.trim())
+  }
+
+  if (source.value.trim()) {
+    query.set('source', source.value.trim())
+  }
+
   try {
     const response = await fetch(
-      'http://localhost:8080/api/jobs/saved'
+      `http://localhost:8080/api/jobs?${query}`
     )
 
     if (!response.ok) {
       throw new Error(`HTTP错误：${response.status}`)
     }
 
-    jobs.value = await response.json()
+    const result = await response.json()
+
+    jobs.value = result.jobs
+    page.value = result.page
+    size.value = result.size
+    totalElements.value = result.totalElements
+    totalPages.value = result.totalPages
 
     /*
      * 岗位加载完成以后，
@@ -300,6 +333,43 @@ async function loadJobs() {
   } finally {
     loading.value = false
   }
+}
+
+
+/*
+ * =========================
+ * 岗位搜索与分页
+ * =========================
+ */
+function searchJobs() {
+  page.value = 0
+  loadJobs()
+}
+
+function clearSearchConditions() {
+  keyword.value = ''
+  location.value = ''
+  source.value = ''
+  page.value = 0
+  loadJobs()
+}
+
+function goToPreviousPage() {
+  if (page.value <= 0) {
+    return
+  }
+
+  page.value -= 1
+  loadJobs()
+}
+
+function goToNextPage() {
+  if (page.value + 1 >= totalPages.value) {
+    return
+  }
+
+  page.value += 1
+  loadJobs()
 }
 
 
@@ -630,6 +700,127 @@ onMounted(() => {
 
 
     <!-- =========================
+         岗位搜索与比较
+         ========================= -->
+
+    <section class="search-section">
+
+      <h2>岗位搜索</h2>
+
+      <form @submit.prevent="searchJobs">
+        <input
+          v-model="keyword"
+          placeholder="关键词（岗位或公司）"
+        >
+
+        <input
+          v-model="location"
+          placeholder="地点"
+        >
+
+        <input
+          v-model="source"
+          placeholder="来源，例如 XiaozhaoRadar、Remotive"
+        >
+
+        <button type="submit">
+          搜索
+        </button>
+
+        <button
+          type="button"
+          @click="clearSearchConditions"
+        >
+          清空条件
+        </button>
+      </form>
+
+    </section>
+
+
+    <div class="recommend-actions">
+      <span>已选择 {{ selectedJobIds.length }} / 5</span>
+
+      <button
+        :disabled="
+          recommending ||
+          selectedJobIds.length < 3
+        "
+        @click="recommendJobs"
+      >
+        {{ recommending ? '比较中...' : 'AI比较已选岗位' }}
+      </button>
+    </div>
+
+    <p
+      v-if="selectionMessage"
+      class="analysis-error"
+    >
+      {{ selectionMessage }}
+    </p>
+
+    <p
+      v-if="recommendationError"
+      class="analysis-error"
+    >
+      推荐失败：{{ recommendationError }}
+    </p>
+
+    <section
+      v-if="recommendations.length"
+      class="recommendation-result"
+    >
+
+      <h2>AI 比较结果</h2>
+
+      <article
+        v-for="recommendation in recommendations"
+        :key="recommendation.jobId"
+        class="recommendation-card"
+      >
+
+        <h3>
+          {{ recommendation.title }}
+        </h3>
+
+        <p>
+          {{ recommendation.company }}
+          <span v-if="recommendation.location">
+            · {{ recommendation.location }}
+          </span>
+        </p>
+
+        <p>
+          <strong>匹配分数：</strong>
+          {{ recommendation.matchResult.score }}
+        </p>
+
+        <p>
+          <strong>匹配技能：</strong>
+          {{ recommendation.matchResult.matchedSkills.join('、') || '暂无' }}
+        </p>
+
+        <p>
+          <strong>能力缺口：</strong>
+          {{ recommendation.matchResult.gaps.join('、') || '暂无' }}
+        </p>
+
+        <p>
+          <strong>匹配说明：</strong>
+          {{ recommendation.matchResult.reason }}
+        </p>
+
+        <p>
+          <strong>建议：</strong>
+          {{ recommendation.matchResult.suggestion }}
+        </p>
+
+      </article>
+
+    </section>
+
+
+    <!-- =========================
          岗位列表加载状态
          ========================= -->
 
@@ -647,7 +838,7 @@ onMounted(() => {
 
 
     <p v-else-if="jobs.length === 0">
-      暂无岗位
+      暂无岗位（共 {{ totalElements }} 个）
     </p>
 
 
@@ -658,89 +849,8 @@ onMounted(() => {
     <section v-else>
 
       <p class="job-count">
-        共 {{ jobs.length }} 个岗位
+        共 {{ totalElements }} 个岗位
       </p>
-
-      <div class="recommend-actions">
-        <span>已选择 {{ selectedJobIds.length }} / 5</span>
-
-        <button
-          :disabled="
-            recommending ||
-            selectedJobIds.length < 3
-          "
-          @click="recommendJobs"
-        >
-          {{ recommending ? '比较中...' : 'AI比较已选岗位' }}
-        </button>
-      </div>
-
-      <p
-        v-if="selectionMessage"
-        class="analysis-error"
-      >
-        {{ selectionMessage }}
-      </p>
-
-      <p
-        v-if="recommendationError"
-        class="analysis-error"
-      >
-        推荐失败：{{ recommendationError }}
-      </p>
-
-      <section
-        v-if="recommendations.length"
-        class="recommendation-result"
-      >
-
-        <h2>AI 比较结果</h2>
-
-        <article
-          v-for="recommendation in recommendations"
-          :key="recommendation.jobId"
-          class="recommendation-card"
-        >
-
-          <h3>
-            {{ recommendation.title }}
-          </h3>
-
-          <p>
-            {{ recommendation.company }}
-            <span v-if="recommendation.location">
-              · {{ recommendation.location }}
-            </span>
-          </p>
-
-          <p>
-            <strong>匹配分数：</strong>
-            {{ recommendation.matchResult.score }}
-          </p>
-
-          <p>
-            <strong>匹配技能：</strong>
-            {{ recommendation.matchResult.matchedSkills.join('、') || '暂无' }}
-          </p>
-
-          <p>
-            <strong>能力缺口：</strong>
-            {{ recommendation.matchResult.gaps.join('、') || '暂无' }}
-          </p>
-
-          <p>
-            <strong>匹配说明：</strong>
-            {{ recommendation.matchResult.reason }}
-          </p>
-
-          <p>
-            <strong>建议：</strong>
-            {{ recommendation.matchResult.suggestion }}
-          </p>
-
-        </article>
-
-      </section>
 
 
       <div class="job-list">
@@ -1213,6 +1323,31 @@ onMounted(() => {
 
       </div>
 
+      <div
+        v-if="totalPages > 0"
+        class="pagination"
+      >
+
+        <button
+          :disabled="page <= 0"
+          @click="goToPreviousPage"
+        >
+          上一页
+        </button>
+
+        <span>
+          第 {{ page + 1 }} / {{ totalPages }} 页
+        </span>
+
+        <button
+          :disabled="page + 1 >= totalPages"
+          @click="goToNextPage"
+        >
+          下一页
+        </button>
+
+      </div>
+
     </section>
 
   </main>
@@ -1245,7 +1380,8 @@ onMounted(() => {
 
 
 .profile-section,
-.recommendation-result {
+.recommendation-result,
+.search-section {
   margin-bottom: 24px;
   padding: 20px;
   border: 1px solid #ddd;
@@ -1254,7 +1390,8 @@ onMounted(() => {
 
 
 .profile-section h2,
-.recommendation-result h2 {
+.recommendation-result h2,
+.search-section h2 {
   margin-top: 0;
 }
 
@@ -1263,6 +1400,19 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+
+.search-section form {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+
+.search-section input {
+  padding: 8px;
+  font: inherit;
 }
 
 
@@ -1290,6 +1440,15 @@ onMounted(() => {
   gap: 12px;
   align-items: center;
   margin-bottom: 16px;
+}
+
+
+.pagination {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  align-items: center;
+  margin-top: 20px;
 }
 
 
