@@ -1,44 +1,76 @@
 package com.jobradar.service;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.jobradar.domain.JobAnalysis;
-import com.jobradar.domain.JobMatchResult;
-import com.jobradar.domain.UserProfile;
-import com.jobradar.dto.AnalyzeJobRequest;
-import com.jobradar.domain.Job;
-import java.time.LocalDate;
-import com.jobradar.domain.JobRecommendation;
-import java.util.Comparator;
-import com.jobradar.matching.JobMatcher;
-import org.springframework.stereotype.Service;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jobradar.aggregation.JobAggregator;
+import com.jobradar.analysis.JobAnalyzer;
 import com.jobradar.cleaning.JobCleaner;
 import com.jobradar.deduplication.JobDeduplicator;
+import com.jobradar.domain.ApplicationStatus;
+import com.jobradar.domain.Job;
+import com.jobradar.domain.JobAnalysis;
+import com.jobradar.domain.JobApplication;
+import com.jobradar.domain.JobMatchResult;
+import com.jobradar.domain.JobRecommendation;
+import com.jobradar.domain.UserProfile;
+import com.jobradar.dto.AnalyzeJobRequest;
+import com.jobradar.matching.JobMatcher;
+import com.jobradar.repository.JobApplicationRepository;
+import com.jobradar.repository.JobRepository;
 import com.jobradar.source.JobSource;
 import com.jobradar.source.RemotiveJobSource;
-import org.springframework.web.bind.annotation.RequestParam;
-import com.jobradar.analysis.JobAnalyzer;
-import java.util.ArrayList;
-import java.util.List;
-import com.jobradar.repository.JobRepository;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jobradar.source.XiaozhaoRadarJobSource;
+
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HexFormat;
-import com.jobradar.domain.ApplicationStatus;
-import com.jobradar.domain.JobApplication;
-import com.jobradar.repository.JobApplicationRepository;
-import com.jobradar.domain.ApplicationStatus;
-import com.jobradar.domain.JobApplication;
-import com.jobradar.repository.JobApplicationRepository;
-
+import java.util.List;
 import java.util.NoSuchElementException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 @Service
 public class JobService {
+
+    private final JobAnalyzer jobAnalyzer;
+    private final JobRepository jobRepository;
+    private final JobMatcher jobMatcher;
+    private final StringRedisTemplate stringRedisTemplate;
+    private final ObjectMapper objectMapper;
+    private final JobApplicationRepository jobApplicationRepository;
+
+    private static final Duration JOB_ANALYSIS_CACHE_TTL =
+            Duration.ofHours(24);
+
+    public JobService(
+            JobAnalyzer jobAnalyzer,
+            JobRepository jobRepository,
+            JobApplicationRepository jobApplicationRepository,
+            JobMatcher jobMatcher,
+            StringRedisTemplate stringRedisTemplate,
+            ObjectMapper objectMapper) {
+
+        this.jobAnalyzer = jobAnalyzer;
+        this.jobRepository = jobRepository;
+        this.jobApplicationRepository = jobApplicationRepository;
+        this.jobMatcher = jobMatcher;
+        this.stringRedisTemplate = stringRedisTemplate;
+        this.objectMapper = objectMapper;
+    }
+
+
+    // =========================
+    // AI 岗位分析
+    // =========================
+
     public JobAnalysis analyzeJob(AnalyzeJobRequest request) {
 
         System.out.println("进入 JobService.analyzeJob()");
@@ -105,6 +137,7 @@ public class JobService {
             );
         }
     }
+
     private String buildJobAnalysisCacheKey(Job job) {
 
         String rawKey =
@@ -144,31 +177,14 @@ public class JobService {
             );
         }
     }
-    private final JobAnalyzer jobAnalyzer;
-    private final JobRepository jobRepository;
-    private final JobMatcher jobMatcher;
-    private final StringRedisTemplate stringRedisTemplate;
-    private final ObjectMapper objectMapper;
-    private static final Duration JOB_ANALYSIS_CACHE_TTL =
-            Duration.ofHours(24);
-    private final JobApplicationRepository jobApplicationRepository;
 
-    public JobService(
-            JobAnalyzer jobAnalyzer,
-            JobRepository jobRepository,
-            JobApplicationRepository jobApplicationRepository,
-            JobMatcher jobMatcher,
-            StringRedisTemplate stringRedisTemplate,
-            ObjectMapper objectMapper) {
 
-        this.jobAnalyzer = jobAnalyzer;
-        this.jobRepository = jobRepository;
-        this.jobApplicationRepository = jobApplicationRepository;
-        this.jobMatcher = jobMatcher;
-        this.stringRedisTemplate = stringRedisTemplate;
-        this.objectMapper = objectMapper;
-    }
+    // =========================
+    // 测试岗位
+    // =========================
+
     public Job getSampleJob() {
+
         return new Job(
                 "字节跳动",
                 "Java后端开发实习生",
@@ -179,6 +195,7 @@ public class JobService {
                 "https://example.com/job/1"
         );
     }
+
     public Job saveSampleJob() {
 
         Job job = new Job(
@@ -193,78 +210,127 @@ public class JobService {
 
         return jobRepository.save(job);
     }
+
+
+    // =========================
+    // 数据库岗位查询
+    // =========================
+
     public List<Job> getSavedJobs() {
+
         return jobRepository.findAll();
     }
-    public List<Job> getJobs(String keyword, String location ) {
-        System.out.println("Service收到的keyword：" + keyword);
-        System.out.println("Service收到的location：" + location);
+    public Page<Job> searchSavedJobs(
+            String keyword,
+            String location,
+            String source,
+            int page,
+            int size) {
 
-        List<JobSource> sources = new ArrayList<>();
-        sources.add(new RemotiveJobSource());
+        if (page < 0) {
+            page = 0;
+        }
 
-        JobAggregator aggregator = new JobAggregator(sources);
-        List<Job> jobs = aggregator.aggregateJobs();
+        if (size <= 0) {
+            size = 10;
+        }
 
-        JobCleaner cleaner = new JobCleaner();
-        List<Job> cleanedJobs = new ArrayList<>();
+        if (size > 100) {
+            size = 100;
+        }
+
+        Pageable pageable =
+                PageRequest.of(
+                        page,
+                        size
+                );
+
+        return jobRepository.searchJobs(
+                keyword,
+                location,
+                source,
+                pageable
+        );
+    }
+
+    // =========================
+    // 外部岗位来源采集
+    // =========================
+
+    private List<Job> fetchJobsFromSources() {
+
+        List<JobSource> sources =
+                new ArrayList<>();
+
+        sources.add(
+                new RemotiveJobSource()
+        );
+
+        sources.add(
+                new XiaozhaoRadarJobSource()
+        );
+
+        JobAggregator aggregator =
+                new JobAggregator(sources);
+
+        List<Job> jobs =
+                aggregator.aggregateJobs();
+
+        JobCleaner cleaner =
+                new JobCleaner();
+
+        List<Job> cleanedJobs =
+                new ArrayList<>();
 
         for (Job job : jobs) {
-            Job cleanedJob = cleaner.clean(job);
+
+            Job cleanedJob =
+                    cleaner.clean(job);
 
             if (cleanedJob != null) {
                 cleanedJobs.add(cleanedJob);
             }
         }
 
-        JobDeduplicator deduplicator = new JobDeduplicator();
+        JobDeduplicator deduplicator =
+                new JobDeduplicator();
 
-        List<Job> finalJobs = deduplicator.deduplicate(cleanedJobs);
-        List<Job> resultJobs = finalJobs;
-        if (keyword != null && !keyword.isBlank()) {
+        List<Job> finalJobs =
+                deduplicator.deduplicate(
+                        cleanedJobs
+                );
 
-            List<Job> filteredJobs = new ArrayList<>();
+        System.out.println(
+                "Source获取并处理后岗位数量："
+                        + finalJobs.size()
+        );
 
-            for (Job job : resultJobs) {
-                if (job.getTitle() != null
-                        && job.getTitle().toLowerCase().contains(keyword.toLowerCase())) {
-                    filteredJobs.add(job);
-                }
-            }
-
-            resultJobs = filteredJobs;
-        }
-        if (location != null && !location.isBlank()) {
-
-            List<Job> locationFilteredJobs = new ArrayList<>();
-
-            for (Job job : resultJobs) {
-                if (job.getLocation() != null
-                        && job.getLocation().toLowerCase().contains(location.toLowerCase())) {
-                    locationFilteredJobs.add(job);
-                }
-            }
-
-            resultJobs = locationFilteredJobs;
-        }
-        System.out.println("关键词筛选后数量：" + resultJobs.size());
-        return resultJobs;
+        return finalJobs;
     }
+
+
+    // =========================
+    // 岗位导入
+    // =========================
+
     public Job importOneRealJob() {
 
-        List<Job> jobs = getJobs(null, null);
+        List<Job> jobs =
+                fetchJobsFromSources();
 
         if (jobs.isEmpty()) {
             return null;
         }
 
-        Job job = jobs.get(0);
+        Job job =
+                jobs.get(0);
 
         Job existingJob =
-                jobRepository.findBySourceAndSourceUrl(
-                        job.getSource(),
-                        job.getSourceUrl()
-                );
+                jobRepository
+                        .findBySourceAndSourceUrl(
+                                job.getSource(),
+                                job.getSourceUrl()
+                        );
 
         if (existingJob != null) {
             return existingJob;
@@ -272,35 +338,49 @@ public class JobService {
 
         return jobRepository.save(job);
     }
+
     public List<Job> importAllRealJobs() {
 
-        List<Job> jobs = getJobs(null, null);
+        List<Job> jobs =
+                fetchJobsFromSources();
 
-        List<Job> savedJobs = new ArrayList<>();
+        List<Job> savedJobs =
+                new ArrayList<>();
 
         for (Job job : jobs) {
 
             Job existingJob =
-                    jobRepository.findBySourceAndSourceUrl(
-                            job.getSource(),
-                            job.getSourceUrl()
-                    );
+                    jobRepository
+                            .findBySourceAndSourceUrl(
+                                    job.getSource(),
+                                    job.getSourceUrl()
+                            );
 
             if (existingJob == null) {
-                Job savedJob = jobRepository.save(job);
+
+                Job savedJob =
+                        jobRepository.save(job);
+
                 savedJobs.add(savedJob);
             }
         }
 
         return savedJobs;
     }
+
+
+    // =========================
+    // 单岗位匹配
+    // =========================
+
     public JobMatchResult matchJob(
             Long id,
             UserProfile userProfile) {
 
-        Job job = jobRepository
-                .findById(id)
-                .orElse(null);
+        Job job =
+                jobRepository
+                        .findById(id)
+                        .orElse(null);
 
         if (job == null) {
             return null;
@@ -311,10 +391,17 @@ public class JobService {
                 userProfile
         );
     }
+
+
+    // =========================
+    // 多岗位推荐
+    // =========================
+
     public List<JobRecommendation> recommendJobs(
             List<Long> jobIds,
             UserProfile userProfile,
             int topN) {
+
         if (jobIds == null
                 || jobIds.size() < 3
                 || jobIds.size() > 5) {
@@ -323,10 +410,15 @@ public class JobService {
                     "第一版推荐只允许选择3到5个岗位"
             );
         }
+
         List<Job> jobs =
-                jobRepository.findAllById(jobIds);
+                jobRepository.findAllById(
+                        jobIds
+                );
+
         List<JobRecommendation> recommendations =
                 new ArrayList<>();
+
         for (Job job : jobs) {
 
             try {
@@ -356,6 +448,7 @@ public class JobService {
                 );
             }
         }
+
         recommendations.sort(
                 Comparator.comparingInt(
                         (JobRecommendation recommendation) ->
@@ -364,11 +457,13 @@ public class JobService {
                                         .getScore()
                 ).reversed()
         );
+
         int limit =
                 Math.min(
                         topN,
                         recommendations.size()
                 );
+
         return new ArrayList<>(
                 recommendations.subList(
                         0,
@@ -377,17 +472,25 @@ public class JobService {
         );
     }
 
+
+    // =========================
+    // 投递记录
+    // =========================
+
     public JobApplication createApplication(
             Long jobId,
             ApplicationStatus status) {
 
-        Job job = jobRepository
-                .findById(jobId)
-                .orElseThrow(
-                        () -> new NoSuchElementException(
-                                "岗位不存在，jobId=" + jobId
-                        )
-                );
+        Job job =
+                jobRepository
+                        .findById(jobId)
+                        .orElseThrow(
+                                () ->
+                                        new NoSuchElementException(
+                                                "岗位不存在，jobId="
+                                                        + jobId
+                                        )
+                        );
 
         if (jobApplicationRepository
                 .findByJob_Id(jobId)
@@ -412,9 +515,9 @@ public class JobService {
                         status
                 );
 
-        return jobApplicationRepository.save(application);
+        return jobApplicationRepository
+                .save(application);
     }
-
 
     public JobApplication getApplication(
             Long jobId) {
@@ -422,12 +525,13 @@ public class JobService {
         return jobApplicationRepository
                 .findByJob_Id(jobId)
                 .orElseThrow(
-                        () -> new NoSuchElementException(
-                                "该岗位暂无投递记录，jobId=" + jobId
-                        )
+                        () ->
+                                new NoSuchElementException(
+                                        "该岗位暂无投递记录，jobId="
+                                                + jobId
+                                )
                 );
     }
-
 
     public JobApplication updateApplicationStatus(
             Long jobId,
@@ -437,9 +541,11 @@ public class JobService {
                 jobApplicationRepository
                         .findByJob_Id(jobId)
                         .orElseThrow(
-                                () -> new NoSuchElementException(
-                                        "该岗位暂无投递记录，jobId=" + jobId
-                                )
+                                () ->
+                                        new NoSuchElementException(
+                                                "该岗位暂无投递记录，jobId="
+                                                        + jobId
+                                        )
                         );
 
         ApplicationStatus currentStatus =
@@ -461,11 +567,13 @@ public class JobService {
             );
         }
 
-        application.updateStatus(newStatus);
+        application.updateStatus(
+                newStatus
+        );
 
-        return jobApplicationRepository.save(application);
+        return jobApplicationRepository
+                .save(application);
     }
-
 
     private boolean isValidStatusTransition(
             ApplicationStatus currentStatus,
@@ -474,16 +582,22 @@ public class JobService {
         return switch (currentStatus) {
 
             case SAVED ->
-                    newStatus == ApplicationStatus.APPLIED;
+                    newStatus
+                            == ApplicationStatus.APPLIED;
 
             case APPLIED ->
-                    newStatus == ApplicationStatus.INTERVIEW
-                            || newStatus == ApplicationStatus.OFFER
-                            || newStatus == ApplicationStatus.REJECTED;
+                    newStatus
+                            == ApplicationStatus.INTERVIEW
+                            || newStatus
+                            == ApplicationStatus.OFFER
+                            || newStatus
+                            == ApplicationStatus.REJECTED;
 
             case INTERVIEW ->
-                    newStatus == ApplicationStatus.OFFER
-                            || newStatus == ApplicationStatus.REJECTED;
+                    newStatus
+                            == ApplicationStatus.OFFER
+                            || newStatus
+                            == ApplicationStatus.REJECTED;
 
             case OFFER, REJECTED -> false;
         };

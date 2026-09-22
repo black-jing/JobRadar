@@ -27,6 +27,7 @@ import org.springframework.http.HttpStatus;
 import java.util.NoSuchElementException;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.data.domain.Page;
 @RestController
 
 @CrossOrigin(origins = "http://localhost:5173")
@@ -57,15 +58,47 @@ public class JobController {
     }
     @GetMapping("/api/jobs")
     public JobSearchResponse getJobs(
-            @RequestParam(value = "keyword", required = false) String keyword,
-            @RequestParam(value = "location", required = false) String location) {
+            @RequestParam(
+                    value = "keyword",
+                    required = false
+            ) String keyword,
 
-        System.out.println("Controller收到的keyword：" + keyword);
-        System.out.println("Controller收到的location：" + location);
+            @RequestParam(
+                    value = "location",
+                    required = false
+            ) String location,
 
-        List<Job> jobs = jobService.getJobs(keyword, location);
+            @RequestParam(
+                    value = "source",
+                    required = false
+            ) String source,
 
-        return new JobSearchResponse(jobs.size(), jobs);
+            @RequestParam(
+                    value = "page",
+                    defaultValue = "0"
+            ) int page,
+
+            @RequestParam(
+                    value = "size",
+                    defaultValue = "10"
+            ) int size) {
+
+        Page<Job> result =
+                jobService.searchSavedJobs(
+                        keyword,
+                        location,
+                        source,
+                        page,
+                        size
+                );
+
+        return new JobSearchResponse(
+                result.getNumber(),
+                result.getSize(),
+                result.getTotalElements(),
+                result.getTotalPages(),
+                result.getContent()
+        );
     }
     @PostMapping("/api/jobs/import-one")
     public Job importOneRealJob() {
