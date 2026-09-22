@@ -1,5 +1,5 @@
 package com.jobradar.service;
-
+import org.springframework.transaction.annotation.Transactional;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jobradar.aggregation.JobAggregator;
@@ -325,18 +325,14 @@ public class JobService {
         Job job =
                 jobs.get(0);
 
-        Job existingJob =
-                jobRepository
-                        .findBySourceAndSourceUrl(
-                                job.getSource(),
-                                job.getSourceUrl()
-                        );
-
-        if (existingJob != null) {
-            return existingJob;
-        }
-
-        return jobRepository.save(job);
+        return jobRepository
+                .findBySourceAndSourceUrl(
+                        job.getSource(),
+                        job.getSourceUrl()
+                )
+                .orElseGet(
+                        () -> jobRepository.save(job)
+                );
     }
 
     public List<Job> importAllRealJobs() {
@@ -349,14 +345,15 @@ public class JobService {
 
         for (Job job : jobs) {
 
-            Job existingJob =
+            boolean alreadyExists =
                     jobRepository
                             .findBySourceAndSourceUrl(
                                     job.getSource(),
                                     job.getSourceUrl()
-                            );
+                            )
+                            .isPresent();
 
-            if (existingJob == null) {
+            if (!alreadyExists) {
 
                 Job savedJob =
                         jobRepository.save(job);
@@ -476,7 +473,7 @@ public class JobService {
     // =========================
     // 投递记录
     // =========================
-
+    @Transactional
     public JobApplication createApplication(
             Long jobId,
             ApplicationStatus status) {
@@ -532,7 +529,7 @@ public class JobService {
                                 )
                 );
     }
-
+    @Transactional
     public JobApplication updateApplicationStatus(
             Long jobId,
             ApplicationStatus newStatus) {

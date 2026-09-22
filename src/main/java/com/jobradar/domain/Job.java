@@ -1,25 +1,79 @@
 package com.jobradar.domain;
+
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
+import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
+
 import java.time.LocalDate;
-import jakarta.persistence.Column;
+import java.time.LocalDateTime;
+
 @Entity
+@Table(
+        name = "job",
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uk_job_source_source_url",
+                        columnNames = {
+                                "source",
+                                "source_url"
+                        }
+                )
+        }
+)
 public class Job {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Column(nullable = false)
     private String company;
+
+    @Column(nullable = false)
     private String title;
+
     private String location;
+
     @Column(columnDefinition = "TEXT")
     private String description;
+
     private LocalDate publishDate;
+
+    @Column(
+            nullable = false,
+            length = 100
+    )
     private String source;
+
+    @Column(
+            name = "source_url",
+            nullable = false,
+            length = 512
+    )
     private String sourceUrl;
+
+    @Column(
+            name = "created_at",
+            nullable = false,
+            updatable = false
+    )
+    private LocalDateTime createdAt;
+
+    @Column(
+            name = "updated_at",
+            nullable = false
+    )
+    private LocalDateTime updatedAt;
+
     protected Job() {
     }
+
     public Job(
             String company,
             String title,
@@ -28,6 +82,7 @@ public class Job {
             LocalDate publishDate,
             String source,
             String sourceUrl) {
+
         this.company = company;
         this.title = title;
         this.location = location;
@@ -35,11 +90,29 @@ public class Job {
         this.publishDate = publishDate;
         this.source = source;
         this.sourceUrl = sourceUrl;
-
     }
+
+    @PrePersist
+    protected void onCreate() {
+
+        LocalDateTime now =
+                LocalDateTime.now();
+
+        this.createdAt = now;
+        this.updatedAt = now;
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+
+        this.updatedAt =
+                LocalDateTime.now();
+    }
+
     public Long getId() {
         return id;
     }
+
     public String getCompany() {
         return company;
     }
@@ -68,15 +141,26 @@ public class Job {
         return sourceUrl;
     }
 
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
+    }
+
     @Override
     public String toString() {
-        return "Job{"
-                + "company=" + company
-                + ", title=" + title
-                + ", location=" + location
-                + ", publishDate=" + publishDate
-                + ", source=" + source
-                + "}";
 
+        return "Job{"
+                + "id=" + id
+                + ", company='" + company + '\''
+                + ", title='" + title + '\''
+                + ", location='" + location + '\''
+                + ", publishDate=" + publishDate
+                + ", source='" + source + '\''
+                + ", createdAt=" + createdAt
+                + ", updatedAt=" + updatedAt
+                + '}';
     }
 }

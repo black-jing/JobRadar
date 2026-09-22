@@ -1,5 +1,6 @@
 package com.jobradar.domain;
 
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -7,8 +8,12 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToOne;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
+
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "job_application")
@@ -18,12 +23,30 @@ public class JobApplication {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(optional = false)
-    @JoinColumn(name = "job_id", nullable = false)
+    @OneToOne(optional = false)
+    @JoinColumn(
+            name = "job_id",
+            nullable = false,
+            unique = true
+    )
     private Job job;
 
     @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
     private ApplicationStatus status;
+
+    @Column(
+            name = "created_at",
+            nullable = false,
+            updatable = false
+    )
+    private LocalDateTime createdAt;
+
+    @Column(
+            name = "updated_at",
+            nullable = false
+    )
+    private LocalDateTime updatedAt;
 
     protected JobApplication() {
     }
@@ -34,6 +57,23 @@ public class JobApplication {
 
         this.job = job;
         this.status = status;
+    }
+
+    @PrePersist
+    protected void onCreate() {
+
+        LocalDateTime now =
+                LocalDateTime.now();
+
+        this.createdAt = now;
+        this.updatedAt = now;
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+
+        this.updatedAt =
+                LocalDateTime.now();
     }
 
     public Long getId() {
@@ -48,7 +88,17 @@ public class JobApplication {
         return status;
     }
 
-    public void updateStatus(ApplicationStatus status) {
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void updateStatus(
+            ApplicationStatus status) {
+
         this.status = status;
     }
 }
