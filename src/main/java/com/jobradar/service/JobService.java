@@ -46,6 +46,7 @@ public class JobService {
     private final StringRedisTemplate stringRedisTemplate;
     private final ObjectMapper objectMapper;
     private final JobApplicationRepository jobApplicationRepository;
+    private final UserProfileService userProfileService;
 
     private static final Duration JOB_ANALYSIS_CACHE_TTL =
             Duration.ofHours(24);
@@ -54,6 +55,7 @@ public class JobService {
             JobAnalyzer jobAnalyzer,
             JobRepository jobRepository,
             JobApplicationRepository jobApplicationRepository,
+            UserProfileService userProfileService,
             JobMatcher jobMatcher,
             StringRedisTemplate stringRedisTemplate,
             ObjectMapper objectMapper) {
@@ -61,6 +63,7 @@ public class JobService {
         this.jobAnalyzer = jobAnalyzer;
         this.jobRepository = jobRepository;
         this.jobApplicationRepository = jobApplicationRepository;
+        this.userProfileService = userProfileService;
         this.jobMatcher = jobMatcher;
         this.stringRedisTemplate = stringRedisTemplate;
         this.objectMapper = objectMapper;
@@ -371,8 +374,7 @@ public class JobService {
     // =========================
 
     public JobMatchResult matchJob(
-            Long id,
-            UserProfile userProfile) {
+            Long id) {
 
         Job job =
                 jobRepository
@@ -382,6 +384,9 @@ public class JobService {
         if (job == null) {
             return null;
         }
+
+        UserProfile userProfile =
+                userProfileService.getRequiredProfile();
 
         return jobMatcher.match(
                 job,
@@ -396,7 +401,6 @@ public class JobService {
 
     public List<JobRecommendation> recommendJobs(
             List<Long> jobIds,
-            UserProfile userProfile,
             int topN) {
 
         if (jobIds == null
@@ -407,6 +411,9 @@ public class JobService {
                     "第一版推荐只允许选择3到5个岗位"
             );
         }
+
+        UserProfile userProfile =
+                userProfileService.getRequiredProfile();
 
         List<Job> jobs =
                 jobRepository.findAllById(
