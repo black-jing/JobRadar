@@ -71,6 +71,13 @@ public class Job {
     )
     private LocalDateTime updatedAt;
 
+    @Column(name = "analysis_json", columnDefinition = "TEXT")
+    private String analysisJson;
+
+    @Column(name = "analysis_prompt_version", length = 100)
+    private String analysisPromptVersion;
+
+
     protected Job() {
     }
 
@@ -147,6 +154,19 @@ public class Job {
 
     public LocalDateTime getUpdatedAt() {
         return updatedAt;
+    }
+
+    public String getAnalysisJson() {
+        return analysisJson;
+    }
+
+    public String getAnalysisPromptVersion() {
+        return analysisPromptVersion;
+    }
+
+    public void saveAnalysis(String analysisJson, String promptVersion) {
+        this.analysisJson = analysisJson;
+        this.analysisPromptVersion = promptVersion;
     }
 
     @Override

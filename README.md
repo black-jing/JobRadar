@@ -15,6 +15,7 @@ JobRadar 面向实习岗位信息分散、岗位要求难以快速比较的问�
 - 对采集结果进行基础字段清洗、内存去重和数据库防重复。
 - 将岗位持久化到 MySQL，支持关键词、地点、来源筛选及分页查询。
 - 基于 Redis 缓存 DeepSeek 岗位分析结果，减少重复 AI 调用。
+- 新岗位入库后向 RabbitMQ 提交岗位分析任务，由后台消费者分析并将结果保存到 MySQL。
 - 持久化单用户 `UserProfile`，维护目标方向、技能和经历描述。
 - 对单个岗位执行 AI 匹配，返回分数、匹配技能、能力缺口、说明和建议。
 - 选择 3～5 个岗位进行比较，由 Java 后端按匹配分数排序返回推荐结果。
@@ -26,7 +27,7 @@ JobRadar 面向实习岗位信息分散、岗位要求难以快速比较的问�
 | 分类 | 技术 |
 | --- | --- |
 | 后端 | Java 25、Spring Boot、Spring Web、Spring Data JPA、Spring Validation |
-| 数据与缓存 | MySQL、Redis |
+| 数据与缓存 | MySQL、Redis、RabbitMQ |
 | AI | DeepSeek API、Java `HttpClient`、JSON 结构化输出 |
 | 测试 | JUnit 5、Mockito |
 | 前端 | Vue 3、Vite |
@@ -38,12 +39,17 @@ flowchart TD
     A[Remotive / XiaozhaoRadar] --> B[JobSource]
     B --> C[JobAggregator]
     C --> D[JobCleaner / JobDeduplicator]
-    D --> E[(MySQL)]
-    E --> F[Spring Boot Service]
-    F --> G[(Redis)]
-    F --> H[DeepSeek API]
-    F --> I[REST API]
-    I --> J[Vue 3]
+    D --> E[JobService 保存新岗位与待提交记录]
+    E --> F[(MySQL)]
+    E --> G[JobAnalysisProducer]
+    G --> H[(RabbitMQ job.analysis.queue)]
+    H --> I[JobAnalysisConsumer]
+    I --> F
+    I --> J[(Redis)]
+    I --> K[JobAnalyzer / DeepSeek]
+    K --> I
+    F --> L[REST API]
+    L --> M[Vue 3]
 ```
 
 - Java 负责采集、清洗、去重、状态流转、分页、排序等确定性业务规则。
@@ -95,6 +101,10 @@ OFFER / REJECTED -> 终态
   -> MySQL
 ```
 
+新岗位入库和 `job_analysis_submission` 待提交记录在同一数据库事务中完成。随后 Producer 发送 `jobId`，等待 RabbitMQ 发布确认并检查是否成功路由，再将待提交记录标记为已提交。发布失败时待提交记录保留；下次同步先补交待提交任务，即使原岗位源已不再返回该岗位也能补交。导入接口等待数据库提交和 RabbitMQ 发布确认，但不等待 AI 分析。
+
+Consumer 监听 `job.analysis.queue`，根据 `jobId` 查询并锁定 MySQL 中的 `Job`。若 `analysis_json` 已包含当前 Prompt 版本的有效结果，直接成功确认消息；否则复用现有 Redis 缓存与 `JobAnalyzer`，将原有 `direction`、`skills`、`summary` JSON 存入 `Job.analysis_json`。数据库事务提交后监听方法才返回，消息随后被确认。DeepSeek 网络错误、超时及 HTTP 408/429/5xx 最多尝试三次；其余错误不重试。最终失败由主队列死信配置送入 `job.analysis.dlq`，不会无限 requeue。单条岗位分析失败不会回滚已完成的岗位导入。
+
 ### AI 匹配
 
 ```text
@@ -132,6 +142,7 @@ Springdoc OpenAPI 已引入，应用启动后可访问 Swagger UI：<http://loca
 - Maven
 - MySQL 8
 - Redis
+- RabbitMQ
 - Node.js `^22.18.0 || >=24.12.0`
 - DeepSeek API Key
 
@@ -159,7 +170,41 @@ DB_URL=jdbc:mysql://localhost:3306/jobradar
 DB_USERNAME=root
 REDIS_HOST=localhost
 REDIS_PORT=6379
+RABBITMQ_HOST=localhost
+RABBITMQ_PORT=5672
+RABBITMQ_USERNAME=guest
+RABBITMQ_PASSWORD=guest
 ```
+
+### RabbitMQ 本地联调
+
+如果本机有 Docker，可先启动 RabbitMQ 管理版：
+
+```bash
+docker run -d --name jobradar-rabbit -p 5672:5672 -p 15672:15672 rabbitmq:4-management
+```
+
+启动 MySQL、Redis 并设置 `DEEPSEEK_API_KEY` 后，运行 `mvn spring-boot:run`。应用会声明 `job.exchange`（Direct）、`job.analysis.queue`、`job.dlx` 与 `job.analysis.dlq`。管理页面为 <http://localhost:15672>，本地默认账号和密码都是 `guest`。
+
+最小验证：首次导入前，用 PowerShell 执行下面的命令。应用启动后 10 秒会自动同步一次，因此也可以观察那次定时同步。如果岗位源中有新岗位，导入接口应在发布确认后返回；此时 AI 分析可仍在后台进行。
+
+```powershell
+$timer = [System.Diagnostics.Stopwatch]::StartNew()
+$jobs = Invoke-RestMethod -Method Post http://localhost:8080/api/jobs/import-all
+$timer.Stop()
+$timer.Elapsed
+$jobs | Select-Object id,title
+```
+
+在 RabbitMQ 管理页面查看主队列消息逐步被消费；同时在 MySQL 中反复查询：
+
+```sql
+SELECT id, title, analysis_prompt_version, analysis_json
+FROM job ORDER BY id DESC LIMIT 20;
+SELECT job_id, pending FROM job_analysis_submission ORDER BY job_id DESC LIMIT 20;
+```
+
+预期：请求返回时不需要所有新岗位都已有 `analysis_json`；之后这些字段逐步填入。向 `job.exchange` 使用 `job.analysis` routing key 手动投递一个已有岗位的 ID，可以验证重复消息不再调用 DeepSeek。投递不存在的 ID，可在 `job.analysis.dlq` 看到死信。不要用生产数据验证故障路径。
 
 ### 启动后端
 

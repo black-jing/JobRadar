@@ -9,6 +9,7 @@ import com.jobradar.deduplication.JobDeduplicator;
 import com.jobradar.domain.ApplicationStatus;
 import com.jobradar.domain.Job;
 import com.jobradar.domain.JobAnalysis;
+import com.jobradar.domain.JobAnalysisSubmission;
 import com.jobradar.domain.JobApplication;
 import com.jobradar.domain.JobMatchResult;
 import com.jobradar.domain.JobRecommendation;
@@ -17,12 +18,15 @@ import com.jobradar.dto.AnalyzeJobRequest;
 import com.jobradar.matching.JobMatcher;
 import com.jobradar.repository.JobApplicationRepository;
 import com.jobradar.repository.JobRepository;
+import com.jobradar.repository.JobAnalysisSubmissionRepository;
+import com.jobradar.messaging.JobAnalysisProducer;
 import com.jobradar.source.JobSource;
 import com.jobradar.source.RemotiveJobSource;
 import com.jobradar.source.XiaozhaoRadarJobSource;
 
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -47,6 +51,9 @@ public class JobService {
     private final ObjectMapper objectMapper;
     private final JobApplicationRepository jobApplicationRepository;
     private final UserProfileService userProfileService;
+    private final JobAnalysisProducer jobAnalysisProducer;
+    private final JobAnalysisSubmissionRepository submissionRepository;
+    private final TransactionTemplate transactionTemplate;
 
     private static final Duration JOB_ANALYSIS_CACHE_TTL =
             Duration.ofHours(24);
@@ -58,7 +65,10 @@ public class JobService {
             UserProfileService userProfileService,
             JobMatcher jobMatcher,
             StringRedisTemplate stringRedisTemplate,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            JobAnalysisProducer jobAnalysisProducer,
+            JobAnalysisSubmissionRepository submissionRepository,
+            TransactionTemplate transactionTemplate) {
 
         this.jobAnalyzer = jobAnalyzer;
         this.jobRepository = jobRepository;
@@ -67,6 +77,9 @@ public class JobService {
         this.jobMatcher = jobMatcher;
         this.stringRedisTemplate = stringRedisTemplate;
         this.objectMapper = objectMapper;
+        this.jobAnalysisProducer = jobAnalysisProducer;
+        this.submissionRepository = submissionRepository;
+        this.transactionTemplate = transactionTemplate;
     }
 
 
@@ -88,8 +101,48 @@ public class JobService {
                 null
         );
 
-        String cacheKey =
-                buildJobAnalysisCacheKey(job);
+        return analyzeWithCache(job);
+    }
+
+    @Transactional
+    public void analyzeImportedJob(Long jobId) {
+        Job job = jobRepository.findByIdForAnalysis(jobId)
+                .orElseThrow(() -> new NoSuchElementException("岗位不存在，jobId=" + jobId));
+
+        if (jobAnalyzer.getPromptVersion().equals(job.getAnalysisPromptVersion())
+                && job.getAnalysisJson() != null
+                && !job.getAnalysisJson().isBlank()) {
+            try {
+                JobAnalysis saved = objectMapper.readValue(job.getAnalysisJson(), JobAnalysis.class);
+                if (isValidAnalysis(saved)) {
+                    return;
+                }
+            } catch (JsonProcessingException ignored) {
+                // Invalid stored JSON is regenerated.
+            }
+        }
+
+        JobAnalysis analysis = analyzeWithCache(job);
+        if (!isValidAnalysis(analysis)) {
+            throw new IllegalStateException("岗位分析结果无效，jobId=" + jobId);
+        }
+        try {
+            job.saveAnalysis(objectMapper.writeValueAsString(analysis), jobAnalyzer.getPromptVersion());
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("岗位分析结果序列化失败，jobId=" + jobId, e);
+        }
+        jobRepository.saveAndFlush(job);
+    }
+
+    private boolean isValidAnalysis(JobAnalysis analysis) {
+        return analysis != null
+                && analysis.getDirection() != null && !analysis.getDirection().isBlank()
+                && analysis.getSkills() != null
+                && analysis.getSummary() != null && !analysis.getSummary().isBlank();
+    }
+
+    private JobAnalysis analyzeWithCache(Job job) {
+        String cacheKey = buildJobAnalysisCacheKey(job);
 
         System.out.println(
                 "JobAnalysis cache key: " + cacheKey
@@ -106,10 +159,17 @@ public class JobService {
 
                 System.out.println("CACHE HIT");
 
-                return objectMapper.readValue(
-                        cachedValue,
-                        JobAnalysis.class
-                );
+                try {
+                    JobAnalysis cached = objectMapper.readValue(
+                            cachedValue,
+                            JobAnalysis.class
+                    );
+                    if (isValidAnalysis(cached)) {
+                        return cached;
+                    }
+                } catch (JsonProcessingException ignored) {
+                    // A malformed cache entry is treated as a miss.
+                }
             }
 
             System.out.println("CACHE MISS");
@@ -318,6 +378,8 @@ public class JobService {
 
     public Job importOneRealJob() {
 
+        submitPendingAnalyses();
+
         List<Job> jobs =
                 fetchJobsFromSources();
 
@@ -328,17 +390,19 @@ public class JobService {
         Job job =
                 jobs.get(0);
 
-        return jobRepository
+        Job savedJob = jobRepository
                 .findBySourceAndSourceUrl(
                         job.getSource(),
                         job.getSourceUrl()
                 )
-                .orElseGet(
-                        () -> jobRepository.save(job)
-                );
+                .orElseGet(() -> saveNewImportedJob(job));
+        submitPendingAnalysis(savedJob);
+        return savedJob;
     }
 
     public List<Job> importAllRealJobs() {
+
+        submitPendingAnalyses();
 
         List<Job> jobs =
                 fetchJobsFromSources();
@@ -348,24 +412,47 @@ public class JobService {
 
         for (Job job : jobs) {
 
-            boolean alreadyExists =
+            Job existing =
                     jobRepository
                             .findBySourceAndSourceUrl(
                                     job.getSource(),
                                     job.getSourceUrl()
                             )
-                            .isPresent();
+                            .orElse(null);
 
-            if (!alreadyExists) {
+            if (existing == null) {
 
-                Job savedJob =
-                        jobRepository.save(job);
+                Job savedJob = saveNewImportedJob(job);
+                submitPendingAnalysis(savedJob);
 
                 savedJobs.add(savedJob);
+            } else {
+                submitPendingAnalysis(existing);
             }
         }
 
         return savedJobs;
+    }
+
+    private Job saveNewImportedJob(Job job) {
+        return transactionTemplate.execute(status -> {
+            Job saved = jobRepository.saveAndFlush(job);
+            submissionRepository.saveAndFlush(new JobAnalysisSubmission(saved.getId()));
+            return saved;
+        });
+    }
+
+    private void submitPendingAnalysis(Job job) {
+        if (submissionRepository.findById(job.getId())
+                .map(JobAnalysisSubmission::isPending).orElse(false)) {
+            jobAnalysisProducer.submit(job.getId());
+        }
+    }
+
+    private void submitPendingAnalyses() {
+        for (JobAnalysisSubmission submission : submissionRepository.findByPendingTrue()) {
+            jobAnalysisProducer.submit(submission.getJobId());
+        }
     }
 
 

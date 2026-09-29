@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.jobradar.analysis.JobAnalyzer;
 import com.jobradar.domain.Job;
 import com.jobradar.domain.JobAnalysis;
+import com.jobradar.messaging.RetryableJobAnalysisException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -13,6 +14,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -120,8 +122,13 @@ public class DeepSeekJobAnalyzer implements JobAnalyzer {
                     request,
                     HttpResponse.BodyHandlers.ofString()
             );
+            if (response.statusCode() == 408 || response.statusCode() == 429
+                    || response.statusCode() >= 500) {
+                throw new RetryableJobAnalysisException(
+                        "DeepSeek 临时错误，状态码：" + response.statusCode(), null);
+            }
             if (response.statusCode() != 200) {
-                throw new RuntimeException(
+                throw new IllegalStateException(
                         "DeepSeek请求失败，状态码："
                                 + response.statusCode()
                                 + "，响应："
@@ -171,7 +178,14 @@ public class DeepSeekJobAnalyzer implements JobAnalyzer {
                     skills,
                     summary
             );
-        }catch(Exception e){
+        } catch (RetryableJobAnalysisException e) {
+            throw e;
+        } catch (IOException e) {
+            throw new RetryableJobAnalysisException("DeepSeek 网络或超时错误", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("DeepSeek 请求被中断", e);
+        } catch (Exception e) {
             throw new RuntimeException(
                     "DeepSeek岗位分析失败",
                     e
