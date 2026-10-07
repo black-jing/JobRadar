@@ -1,0 +1,22 @@
+{
+  "promptVersion": "analysis-prompt-v2",
+  "selectedJobs": 10,
+  "miss": {
+    "count": 10,
+    "successes": 9,
+    "meanMs": 3976.7730499999984,
+    "medianMs": 2444.677499999998,
+    "minMs": 1730.554099999994,
+    "maxMs": 8755.4482,
+    "p95Ms": 8755.4482
+  },
+  "hit": {
+    "count": 27,
+    "successes": 27,
+    "meanMs": 11.13485185185226,
+    "medianMs": 9.132399999998597,
+    "minMs": 2.9000999999998385,
+    "maxMs": 29.609300000000076,
+    "p95Ms": 28.685700000001816
+  }
+}

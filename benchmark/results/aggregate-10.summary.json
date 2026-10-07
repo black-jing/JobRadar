@@ -1,0 +1,31 @@
+{
+  "source": "Aggregate",
+  "sourceCount": 2,
+  "sourceReturned": 171,
+  "cleaned": 171,
+  "deduplicated": 171,
+  "fetchMs": {
+    "count": 10,
+    "mean": 4084.6025999999997,
+    "median": 4002.3525,
+    "min": 3484.324,
+    "max": 5421.297,
+    "p95": 5421.297
+  },
+  "processMs": {
+    "count": 10,
+    "mean": 0.36300000000000004,
+    "median": 0.307,
+    "min": 0.184,
+    "max": 0.706,
+    "p95": 0.706
+  },
+  "totalMs": {
+    "count": 10,
+    "mean": 4084.9658000000004,
+    "median": 4002.6035,
+    "min": 3484.509,
+    "max": 5421.682,
+    "p95": 5421.682
+  }
+}

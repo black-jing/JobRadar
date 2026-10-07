@@ -1,0 +1,15 @@
+{
+  "url": "http://localhost:8080/api/jobs?keyword=Java&page=0&size=10",
+  "requests": 100,
+  "concurrency": 1,
+  "warmup": 20,
+  "wallMs": 1317.2676,
+  "meanMs": 13.156359000000009,
+  "medianMs": 13.076299999999947,
+  "minMs": 5.305500000000052,
+  "maxMs": 30.306500000000142,
+  "p95Ms": 21.100599999999986,
+  "p99Ms": 22.939399999999978,
+  "throughputRps": 75.91471922637436,
+  "errors": 0
+}

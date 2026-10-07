@@ -1,0 +1,15 @@
+{
+  "url": "http://localhost:8080/api/jobs?page=0&size=10",
+  "requests": 1000,
+  "concurrency": 20,
+  "warmup": 50,
+  "wallMs": 1292.0147,
+  "meanMs": 25.67873049999999,
+  "medianMs": 23.914299999999912,
+  "minMs": 7.325600000000122,
+  "maxMs": 86.3614,
+  "p95Ms": 40.84230000000002,
+  "p99Ms": 59.33420000000001,
+  "throughputRps": 773.9850018734307,
+  "errors": 0
+}

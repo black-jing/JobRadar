@@ -1,0 +1,4 @@
+source,run,source_returned,cleaned,deduplicated,fetch_ms,process_ms,total_ms
+XiaozhaoRadar,1,155,155,155,2230.353,0.565,2230.918
+XiaozhaoRadar,2,155,155,155,1783.937,0.106,1784.043
+XiaozhaoRadar,3,155,155,155,1862.325,0.301,1862.626

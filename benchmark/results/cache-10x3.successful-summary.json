@@ -1,0 +1,22 @@
+{
+  "attemptedMisses": 10,
+  "failedMisses": 1,
+  "successfulMiss": {
+    "count": 9,
+    "meanMs": 3938.544888888888,
+    "medianMs": 2444.677,
+    "minMs": 1730.554,
+    "maxMs": 8755.448,
+    "p95Ms": 8755.448
+  },
+  "hit": {
+    "count": 27,
+    "meanMs": 11.134814814814815,
+    "medianMs": 9.132,
+    "minMs": 2.9,
+    "maxMs": 29.609,
+    "p95Ms": 28.686
+  },
+  "observedMeanLatencyReductionPercent": 99.71728607572234,
+  "note": "Successful requests only for latency comparison; no independent upstream DeepSeek call counter."
+}

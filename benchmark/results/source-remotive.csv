@@ -1,0 +1,4 @@
+source,run,source_returned,cleaned,deduplicated,fetch_ms,process_ms,total_ms
+Remotive,1,16,16,16,2146.637,0.064,2146.700
+Remotive,2,16,16,16,2067.169,0.047,2067.215
+Remotive,3,16,16,16,2095.871,0.160,2096.030

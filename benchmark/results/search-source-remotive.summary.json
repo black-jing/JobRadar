@@ -1,0 +1,15 @@
+{
+  "url": "http://localhost:8080/api/jobs?source=Remotive&page=0&size=10",
+  "requests": 100,
+  "concurrency": 1,
+  "warmup": 20,
+  "wallMs": 1414.7270999999998,
+  "meanMs": 14.129840999999994,
+  "medianMs": 15.20679999999993,
+  "minMs": 4.923599999999965,
+  "maxMs": 28.79410000000007,
+  "p95Ms": 17.68110000000013,
+  "p99Ms": 21.912399999999934,
+  "throughputRps": 70.6850105578666,
+  "errors": 0
+}

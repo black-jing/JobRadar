@@ -1,0 +1,3 @@
+case,healthy_source_jobs,aggregated_jobs,service_continued
+synthetic_exception,1,1,true
+synthetic_empty,1,1,true
